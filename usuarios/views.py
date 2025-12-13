@@ -2503,3 +2503,324 @@ def obtener_comentarios_eficiencia_individual(request, comparacion_id):
         
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def crear_comparacion_grupal_ia(request, id_comparacion_grupal):
+    try:
+        # El ID de la comparación grupal viene desde la URL
+        if not id_comparacion_grupal:
+            return JsonResponse({
+                'error': 'Se requiere id_comparacion_grupal'
+            }, status=400)
+        
+        # 1. Obtener la comparación grupal
+        try:
+            comparacion = ComparacionesGrupales.objects.get(
+                id=id_comparacion_grupal
+            )
+        except ComparacionesGrupales.DoesNotExist:
+            return JsonResponse({
+                'error': f'Comparación grupal {id_comparacion_grupal} no encontrada'
+            }, status=404)
+        
+        # 2. Obtener todos los códigos fuente asociados
+        # Nota: usar el nombre exacto del campo FK según tu modelo
+        codigos_fuente = CodigosFuente.objects.filter(
+            comparacion_grupal_id=id_comparacion_grupal
+        ).order_by('orden')
+        
+        if codigos_fuente.count() < 2:
+            return JsonResponse({
+                'error': 'Se requieren al menos 2 códigos para realizar la comparación'
+            }, status=400)
+        
+        # 3. Obtener el modelo IA
+        if not comparacion.id_modelo_ia:
+            return JsonResponse({
+                'error': 'La comparación no tiene un modelo de IA asignado'
+            }, status=400)
+        
+        modelo_ia = comparacion.id_modelo_ia
+        
+        # 4. Obtener la configuración según el tipo de modelo
+        config = None
+        proveedor = None
+        prompt_config = None
+        
+        # Intentar obtener configuración de cada proveedor
+        try:
+            config = ConfiguracionClaude.objects.select_related('id_prompt_grupal').get(
+                id_modelo_ia_id=modelo_ia.id,
+                activo=True
+            )
+            proveedor = 'Claude'
+            prompt_config = config.id_prompt_grupal
+        except ConfiguracionClaude.DoesNotExist:
+            pass
+        
+        if not config:
+            try:
+                config = ConfiguracionOpenai.objects.select_related('id_prompt_grupal').get(
+                    id_modelo_ia_id=modelo_ia.id,
+                    activo=True
+                )
+                proveedor = 'OpenAI'
+                prompt_config = config.id_prompt_grupal
+            except ConfiguracionOpenai.DoesNotExist:
+                pass
+        
+        if not config:
+            try:
+                config = ConfiguracionGemini.objects.select_related('id_prompt_grupal').get(
+                    id_modelo_ia_id=modelo_ia.id,
+                    activo=True
+                )
+                proveedor = 'Gemini'
+                prompt_config = config.id_prompt_grupal
+            except ConfiguracionGemini.DoesNotExist:
+                pass
+        
+        if not config:
+            try:
+                config = ConfiguracionDeepseek.objects.select_related('id_prompt_grupal').get(
+                    id_modelo_ia_id=modelo_ia.id,
+                    activo=True
+                )
+                proveedor = 'DeepSeek'
+                prompt_config = config.id_prompt_grupal
+            except ConfiguracionDeepseek.DoesNotExist:
+                pass
+        
+        if not config or not prompt_config:
+            return JsonResponse({
+                'error': 'No hay configuración activa para este modelo de IA o no tiene prompt grupal configurado'
+            }, status=404)
+        
+        # 5. Verificar que el prompt esté activo
+        if not prompt_config.activo:
+            return JsonResponse({
+                'error': 'El prompt grupal configurado no está activo'
+            }, status=400)
+        
+        # 6. Construir el array de códigos para el prompt
+        codigos_array = []
+        for idx, codigo in enumerate(codigos_fuente, start=1):
+            nombre_archivo = codigo.nombre_archivo or f"Código {idx}"
+            codigos_array.append(
+                f"### CÓDIGO {idx}: {nombre_archivo}\n```\n{codigo.codigo}\n```"
+            )
+        
+        codigos_texto = "\n\n".join(codigos_array)
+        
+        # 7. Reemplazar placeholders en el prompt
+        prompt_procesado = prompt_config.template_prompt.replace(
+            '{{codigos_array}}', codigos_texto
+        )
+        
+        # Reemplazar placeholders individuales si existen
+        for idx, codigo in enumerate(codigos_fuente, start=1):
+            nombre_archivo = codigo.nombre_archivo or f"Código {idx}"
+            prompt_procesado = prompt_procesado.replace(
+                f'{{{{nombre_archivo_{idx}}}}}', nombre_archivo
+            ).replace(
+                f'{{{{codigo_{idx}}}}}', codigo.codigo
+            )
+        
+        # 8. Preparar headers y payload según el proveedor
+        headers = {}
+        payload = {}
+        endpoint_url = config.endpoint_url
+        
+        if proveedor == 'Claude':
+            headers = {
+                'Content-Type': 'application/json',
+                'x-api-key': config.api_key,
+                'anthropic-version': config.anthropic_version
+            }
+            payload = {
+                'model': config.model_name,
+                'max_tokens': config.max_tokens,
+                'messages': [
+                    {
+                        'role': 'user',
+                        'content': prompt_procesado
+                    }
+                ]
+            }
+            
+        elif proveedor == 'OpenAI':
+            headers = {
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {config.api_key}'
+            }
+            payload = {
+                'model': config.model_name,
+                'messages': [
+                    {
+                        'role': 'user',
+                        'content': prompt_procesado
+                    }
+                ],
+                'max_tokens': config.max_tokens,
+                'temperature': float(config.temperature)
+            }
+            
+        elif proveedor == 'Gemini':
+            headers = {
+                'Content-Type': 'application/json'
+            }
+            # Gemini usa la API key en la URL
+            endpoint_url = f"{config.endpoint_url}/{config.model_name}:generateContent?key={config.api_key}"
+            payload = {
+                'contents': [
+                    {
+                        'parts': [
+                            {
+                                'text': prompt_procesado
+                            }
+                        ]
+                    }
+                ],
+                'generationConfig': {
+                    'maxOutputTokens': config.max_tokens,
+                    'temperature': float(config.temperature)
+                }
+            }
+            
+        elif proveedor == 'DeepSeek':
+            headers = {
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {config.api_key}'
+            }
+            payload = {
+                'model': config.model_name,
+                'messages': [
+                    {
+                        'role': 'user',
+                        'content': prompt_procesado
+                    }
+                ],
+                'max_tokens': config.max_tokens,
+                'temperature': float(config.temperature)
+            }
+        
+        # 9. Hacer la petición a la API
+        inicio = time.time()
+        
+        response = requests.post(
+            endpoint_url,
+            headers=headers,
+            json=payload,
+            timeout=120  # Timeout mayor para análisis grupal
+        )
+        
+        tiempo_respuesta = time.time() - inicio
+        
+        # 10. Verificar respuesta
+        if response.status_code != 200:
+            return JsonResponse({
+                'error': f'Error de la API {proveedor}: {response.status_code}',
+                'detalle': response.text
+            }, status=response.status_code)
+        
+        # 11. Extraer la respuesta según el proveedor
+        response_data = response.json()
+        respuesta_ia = None
+        tokens_usados = 0
+        
+        if proveedor == 'Claude':
+            respuesta_ia = response_data['content'][0]['text']
+            tokens_usados = (
+                response_data.get('usage', {}).get('input_tokens', 0) + 
+                response_data.get('usage', {}).get('output_tokens', 0)
+            )
+            
+        elif proveedor == 'OpenAI':
+            respuesta_ia = response_data['choices'][0]['message']['content']
+            tokens_usados = response_data.get('usage', {}).get('total_tokens', 0)
+            
+        elif proveedor == 'Gemini':
+            respuesta_ia = response_data['candidates'][0]['content']['parts'][0]['text']
+            tokens_usados = (
+                response_data.get('usageMetadata', {}).get('promptTokenCount', 0) +
+                response_data.get('usageMetadata', {}).get('candidatesTokenCount', 0)
+            )
+            
+        elif proveedor == 'DeepSeek':
+            respuesta_ia = response_data['choices'][0]['message']['content']
+            tokens_usados = response_data.get('usage', {}).get('total_tokens', 0)
+        
+        # 12. Preparar resumen de códigos comparados
+        codigos_resumen = []
+        for idx, codigo in enumerate(codigos_fuente, start=1):
+            nombre_archivo = codigo.nombre_archivo or f"Código {idx}"
+            preview = codigo.codigo[:100] + '...' if len(codigo.codigo) > 100 else codigo.codigo
+            codigos_resumen.append({
+                'orden': idx,
+                'nombre_archivo': nombre_archivo,
+                'preview': preview,
+                'longitud': len(codigo.codigo)
+            })
+        
+        # 13. Guardar resultado en la base de datos
+        try:
+            # Eliminar resultado anterior si existe (para evitar duplicados)
+            ResultadosSimilitudGrupal.objects.filter(
+                id_comparacion_grupal=comparacion
+            ).delete()
+            
+            # Crear nuevo resultado
+            resultado = ResultadosSimilitudGrupal.objects.create(
+                id_comparacion_grupal=comparacion,
+                respuesta_completa=respuesta_ia,
+                tokens_usados=tokens_usados,
+                tiempo_respuesta_segundos=round(tiempo_respuesta, 2)
+            )
+            
+            mensaje_guardado = 'Resultado guardado exitosamente'
+            resultado_id = resultado.id_resultado_similitud_grupal
+            
+        except Exception as e:
+            mensaje_guardado = f'Error al guardar resultado: {str(e)}'
+            resultado_id = None
+        
+        # 14. Retornar resultado
+        return JsonResponse({
+            'mensaje': 'Comparación grupal exitosa',
+            'guardado': mensaje_guardado,
+            'resultado_id': resultado_id,
+            'comparacion_grupal_id': id_comparacion_grupal,
+            'nombre_comparacion': comparacion.nombre_comparacion,
+            'lenguaje': comparacion.lenguaje.nombre if comparacion.lenguaje else 'No especificado',
+            'total_codigos': codigos_fuente.count(),
+            'modelo_usado': modelo_ia.nombre,
+            'proveedor': proveedor,
+            'model_name': config.model_name,
+            'prompt_usado': {
+                'version': prompt_config.version,
+                'descripcion': prompt_config.descripcion,
+                'tipo': getattr(prompt_config, 'tipo', 'grupal')
+            },
+            'tiempo_respuesta_segundos': round(tiempo_respuesta, 2),
+            'tokens_usados': tokens_usados,
+            'respuesta_ia': respuesta_ia,
+            'codigos_comparados': codigos_resumen
+        }, status=200)
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'error': 'JSON inválido en el body'
+        }, status=400)
+    except requests.Timeout:
+        return JsonResponse({
+            'error': 'Timeout al llamar a la API de IA (análisis grupal requiere más tiempo)'
+        }, status=504)
+    except requests.RequestException as e:
+        return JsonResponse({
+            'error': f'Error en la petición HTTP: {str(e)}'
+        }, status=500)
+    except Exception as e:
+        return JsonResponse({
+            'error': f'Error interno: {str(e)}'
+        }, status=500)

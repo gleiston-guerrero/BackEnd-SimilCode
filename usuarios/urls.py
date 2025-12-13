@@ -32,4 +32,5 @@ urlpatterns = [
     path('crear_comentario_eficiencia_individual/<int:id_resultado_eficiencia>/', views.crear_comentario_eficiencia_individual, name='crear_comentario_eficiencia_individual'),
     path('mostrar_resultados_eficiencia_individual/<int:comparacion_id>/', views.obtener_resultados_eficiencia_individual, name="obtener_resultados_eficiencia_individual"),
     path('mostrar_comentarios_eficiencia_individual/<int:comparacion_id>/', views.obtener_comentarios_eficiencia_individual, name="obtener_comentarios_eficiencia_individual"),
+    path('crear_comparacion_grupal_ia/<int:id_comparacion_grupal>/', views.crear_comparacion_grupal_ia, name="crear_comparacion_grupal_ia")
 ]

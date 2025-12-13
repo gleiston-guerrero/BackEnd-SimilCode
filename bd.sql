@@ -68,6 +68,7 @@ CREATE TABLE prompt_comparacion (
     template_prompt TEXT NOT NULL,
     descripcion TEXT,
     version VARCHAR(20),
+    tipo VARCHAR(20) CHECK (tipo IN ('individual', 'grupal')) DEFAULT 'individual',
     activo BOOLEAN DEFAULT true,
     fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     fecha_modificacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -77,7 +78,9 @@ CREATE TABLE configuracion_claude (
     id_config_claude SERIAL PRIMARY KEY,
     id_modelo_ia INTEGER UNIQUE NOT NULL REFERENCES modelos_ia(id_modelo_ia) ON DELETE CASCADE,
     id_prompt INTEGER NOT NULL REFERENCES prompt_comparacion(id_prompt) ON DELETE RESTRICT,
+    id_prompt_grupal INTEGER REFERENCES prompt_comparacion(id_prompt) ON DELETE RESTRICT,
     id_prompt_eficiencia INTEGER REFERENCES prompt_eficiencia_algoritmica(id_prompt_eficiencia) ON DELETE RESTRICT,
+    id_prompt_eficiencia_grupal INTEGER REFERENCES prompt_eficiencia_algoritmica(id_prompt_eficiencia) ON DELETE RESTRICT,
     endpoint_url VARCHAR(500) NOT NULL DEFAULT 'https://api.anthropic.com/v1/messages',
     api_key VARCHAR(500) NOT NULL,
     model_name VARCHAR(100) NOT NULL,
@@ -92,7 +95,9 @@ CREATE TABLE configuracion_openai (
     id_config_openai SERIAL PRIMARY KEY,
     id_modelo_ia INTEGER UNIQUE NOT NULL REFERENCES modelos_ia(id_modelo_ia) ON DELETE CASCADE,
     id_prompt INTEGER NOT NULL REFERENCES prompt_comparacion(id_prompt) ON DELETE RESTRICT,
+    id_prompt_grupal INTEGER REFERENCES prompt_comparacion(id_prompt) ON DELETE RESTRICT,
     id_prompt_eficiencia INTEGER REFERENCES prompt_eficiencia_algoritmica(id_prompt_eficiencia) ON DELETE RESTRICT,
+    id_prompt_eficiencia_grupal INTEGER REFERENCES prompt_eficiencia_algoritmica(id_prompt_eficiencia) ON DELETE RESTRICT,
     endpoint_url VARCHAR(500) NOT NULL DEFAULT 'https://api.openai.com/v1/chat/completions',
     api_key VARCHAR(500) NOT NULL,
     model_name VARCHAR(100) NOT NULL,
@@ -107,7 +112,9 @@ CREATE TABLE configuracion_gemini (
     id_config_gemini SERIAL PRIMARY KEY,
     id_modelo_ia INTEGER UNIQUE NOT NULL REFERENCES modelos_ia(id_modelo_ia) ON DELETE CASCADE,
     id_prompt INTEGER NOT NULL REFERENCES prompt_comparacion(id_prompt) ON DELETE RESTRICT,
+    id_prompt_grupal INTEGER REFERENCES prompt_comparacion(id_prompt) ON DELETE RESTRICT,
     id_prompt_eficiencia INTEGER REFERENCES prompt_eficiencia_algoritmica(id_prompt_eficiencia) ON DELETE RESTRICT,
+    id_prompt_eficiencia_grupal INTEGER REFERENCES prompt_eficiencia_algoritmica(id_prompt_eficiencia) ON DELETE RESTRICT,
     endpoint_url VARCHAR(500) NOT NULL DEFAULT 'https://generativelanguage.googleapis.com/v1beta/models',
     api_key VARCHAR(500) NOT NULL,
     model_name VARCHAR(100) NOT NULL,
@@ -122,7 +129,9 @@ CREATE TABLE configuracion_deepseek (
     id_config_deepseek SERIAL PRIMARY KEY,
     id_modelo_ia INTEGER UNIQUE NOT NULL REFERENCES modelos_ia(id_modelo_ia) ON DELETE CASCADE,
     id_prompt INTEGER NOT NULL REFERENCES prompt_comparacion(id_prompt) ON DELETE RESTRICT,
+    id_prompt_grupal INTEGER REFERENCES prompt_comparacion(id_prompt) ON DELETE RESTRICT,
     id_prompt_eficiencia INTEGER REFERENCES prompt_eficiencia_algoritmica(id_prompt_eficiencia) ON DELETE RESTRICT,
+    id_prompt_eficiencia_grupal INTEGER REFERENCES prompt_eficiencia_algoritmica(id_prompt_eficiencia) ON DELETE RESTRICT,
     endpoint_url VARCHAR(500) NOT NULL DEFAULT 'https://api.deepseek.com/v1/chat/completions',
     api_key VARCHAR(500) NOT NULL,
     model_name VARCHAR(100) NOT NULL,
@@ -215,11 +224,10 @@ CREATE TABLE resultados_similitud_individual (
 -- Tabla de resultados de similitud para comparaciones grupales
 CREATE TABLE resultados_similitud_grupal (
     id_resultado_similitud_grupal SERIAL PRIMARY KEY,
-    id_comparacion_grupal INTEGER NOT NULL REFERENCES comparaciones_grupales(id_comparacion_grupal) ON DELETE CASCADE,
-    id_codigo_fuente_1 INTEGER NOT NULL REFERENCES codigos_fuente(id_codigo_fuente) ON DELETE CASCADE,
-    id_codigo_fuente_2 INTEGER NOT NULL REFERENCES codigos_fuente(id_codigo_fuente) ON DELETE CASCADE,
-    porcentaje_similitud DECIMAL(5, 2) NOT NULL,
-    explicacion TEXT
+    id_comparacion_grupal INTEGER NOT NULL REFERENCES comparaciones_grupales(id) ON DELETE CASCADE,
+    respuesta_completa TEXT NOT NULL,
+    tokens_usados INTEGER,
+    tiempo_respuesta_segundos DECIMAL(10, 2)
 );
 
 CREATE TABLE resultados_eficiencia_individual (
