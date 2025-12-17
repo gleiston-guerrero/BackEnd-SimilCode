@@ -2824,3 +2824,215 @@ def crear_comparacion_grupal_ia(request, id_comparacion_grupal):
         return JsonResponse({
             'error': f'Error interno: {str(e)}'
         }, status=500)
+    
+@csrf_exempt
+@require_http_methods(["POST"])
+def analizar_big_o_grupal(request, comparacion_grupal_id):
+    """Analizar Big O de una comparación grupal y guardar resultados"""
+    payload = validar_token(request)
+    
+    if not payload or 'error' in payload:
+        return JsonResponse({'error': 'Token inválido'}, status=401)
+    
+    try:
+        comparacion_grupal = ComparacionesGrupales.objects.get(pk=comparacion_grupal_id)
+        
+        # Obtener todos los códigos de la comparación grupal ordenados
+        codigos_fuente = CodigosFuente.objects.filter(
+            comparacion_grupal=comparacion_grupal_id
+        ).order_by('orden')
+        
+        if codigos_fuente.count() < 2:
+            return JsonResponse({
+                'error': 'Se necesitan al menos 2 códigos para analizar'
+            }, status=400)
+        
+        lenguaje = comparacion_grupal.lenguaje.nombre.lower()
+        
+        # Detectar lenguaje si no está soportado
+        if lenguaje not in LENGUAJES_SOPORTADOS:
+            extension = comparacion_grupal.lenguaje.extension
+            lenguaje_detectado = detectar_lenguaje_por_extension(extension)
+            
+            if not lenguaje_detectado:
+                return JsonResponse({
+                    'advertencia': f'Lenguaje "{comparacion_grupal.lenguaje.nombre}" no completamente soportado.',
+                    'lenguaje_original': comparacion_grupal.lenguaje.nombre,
+                    'usando_analisis': 'generico'
+                }, status=200)
+            
+            lenguaje = lenguaje_detectado
+        
+        # Analizar cada código
+        analisis_codigos = []
+        for codigo_fuente in codigos_fuente:
+            analisis = analizar_codigo_big_o(codigo_fuente.codigo, lenguaje)
+            analisis['id_codigo_fuente'] = codigo_fuente.id
+            analisis['orden'] = codigo_fuente.orden
+            analisis['nombre_archivo'] = codigo_fuente.nombre_archivo
+            analisis_codigos.append(analisis)
+        
+        # Determinar ganador(es) y rankings
+        ganadores_info = determinar_ganadores_grupal(analisis_codigos)
+        
+        # Calcular estadísticas generales
+        complejidades_temporales = [a['complejidad_temporal'] for a in analisis_codigos]
+        niveles_anidamiento = [a['nivel_anidamiento'] for a in analisis_codigos]
+        
+        mejor_complejidad = min(complejidades_temporales, key=orden_complejidad)
+        peor_complejidad = max(complejidades_temporales, key=orden_complejidad)
+        
+        # Determinar confianza general (la más baja de todas)
+        confianzas = [a['confianza_analisis'] for a in analisis_codigos]
+        confianza_general = determinar_confianza_general(confianzas)
+        
+        # Crear resultado principal
+        resultado_grupal = ResultadosEficienciaGrupal.objects.create(
+            id_comparacion_grupal=comparacion_grupal,
+            fecha_analisis=timezone.now(),
+            total_codigos=len(analisis_codigos),
+            ganador=ganadores_info['ganador'],
+            tipo_ganador=ganadores_info['tipo_ganador'],
+            complejidad_temporal_mejor=mejor_complejidad,
+            complejidad_temporal_peor=peor_complejidad,
+            nivel_anidamiento_maximo=max(niveles_anidamiento),
+            nivel_anidamiento_minimo=min(niveles_anidamiento),
+            confianza_analisis_general=confianza_general
+        )
+        
+        # Guardar detalles de cada código
+        detalles_guardados = []
+        for analisis in analisis_codigos:
+            detalle = DetallesCodigoEficienciaGrupal.objects.create(
+                id_resultado_eficiencia_grupal=resultado_grupal,
+                id_codigo_fuente_id=analisis['id_codigo_fuente'],
+                orden=analisis['orden'],
+                complejidad_temporal=analisis['complejidad_temporal'],
+                complejidad_espacial=analisis['complejidad_espacial'],
+                nivel_anidamiento=analisis['nivel_anidamiento'],
+                patrones_detectados=analisis['patrones_detectados'],
+                estructuras_datos=analisis['estructuras_datos'],
+                confianza_analisis=analisis['confianza_analisis'],
+                es_ganador=analisis['es_ganador'],
+                es_empate=analisis['es_empate'],
+                ranking_eficiencia=analisis['ranking_eficiencia']
+            )
+            
+            detalles_guardados.append({
+                'id_detalle': detalle.id_detalle_codigo_eficiencia_grupal,
+                'orden': analisis['orden'],
+                'nombre_archivo': analisis['nombre_archivo'],
+                'complejidad_temporal': analisis['complejidad_temporal'],
+                'complejidad_espacial': analisis['complejidad_espacial'],
+                'nivel_anidamiento': analisis['nivel_anidamiento'],
+                'patrones_detectados': analisis['patrones_detectados'],
+                'estructuras_datos': analisis['estructuras_datos'],
+                'confianza_analisis': analisis['confianza_analisis'],
+                'es_ganador': analisis['es_ganador'],
+                'es_empate': analisis['es_empate'],
+                'ranking_eficiencia': analisis['ranking_eficiencia']
+            })
+        
+        # Preparar respuesta
+        resultado = {
+            'mensaje': 'Análisis Big O grupal completado',
+            'resultado_id': resultado_grupal.id_resultado_eficiencia_grupal,
+            'total_codigos': len(analisis_codigos),
+            'ganador': ganadores_info['ganador'],
+            'tipo_ganador': ganadores_info['tipo_ganador'],
+            'complejidad_temporal_mejor': mejor_complejidad,
+            'complejidad_temporal_peor': peor_complejidad,
+            'nivel_anidamiento_maximo': max(niveles_anidamiento),
+            'nivel_anidamiento_minimo': min(niveles_anidamiento),
+            'confianza_analisis_general': confianza_general,
+            'codigos_analizados': detalles_guardados,
+            'lenguaje': comparacion_grupal.lenguaje.nombre,
+            'lenguaje_analizado': LENGUAJES_SOPORTADOS[lenguaje]['nombre']
+        }
+        
+        return JsonResponse(resultado, status=200)
+        
+    except ComparacionesGrupales.DoesNotExist:
+        return JsonResponse({'error': 'Comparación grupal no encontrada'}, status=404)
+    except Exception as e:
+        import traceback
+        print("ERROR:", str(e))
+        print(traceback.format_exc())
+        return JsonResponse({
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }, status=500)
+
+
+def determinar_ganadores_grupal(analisis_codigos: List[Dict]) -> Dict:
+    """
+    Determina el/los ganador(es) en una comparación grupal
+    Retorna: {
+        'ganador': orden del ganador o None,
+        'tipo_ganador': 'unico' | 'empate_multiple' | 'empate_todos'
+    }
+    """
+    # Ordenar por complejidad temporal
+    complejidades = [(a['orden'], a['complejidad_temporal']) for a in analisis_codigos]
+    mejor_complejidad = min(complejidades, key=lambda x: orden_complejidad(x[1]))[1]
+    
+    # Encontrar todos los códigos con la mejor complejidad
+    ganadores = [
+        orden for orden, comp in complejidades 
+        if orden_complejidad(comp) == orden_complejidad(mejor_complejidad)
+    ]
+    
+    # Marcar ganadores y empates en cada análisis
+    for analisis in analisis_codigos:
+        if analisis['orden'] in ganadores:
+            if len(ganadores) == 1:
+                analisis['es_ganador'] = True
+                analisis['es_empate'] = False
+                analisis['ranking_eficiencia'] = 1
+            else:
+                analisis['es_ganador'] = False
+                analisis['es_empate'] = True
+                analisis['ranking_eficiencia'] = 1
+        else:
+            analisis['es_ganador'] = False
+            analisis['es_empate'] = False
+            # Calcular ranking para los no ganadores
+            complejidad_actual = orden_complejidad(analisis['complejidad_temporal'])
+            ranking = 1 + sum(
+                1 for a in analisis_codigos 
+                if orden_complejidad(a['complejidad_temporal']) < complejidad_actual
+            )
+            analisis['ranking_eficiencia'] = ranking
+    
+    # Determinar tipo de ganador
+    if len(ganadores) == 1:
+        return {
+            'ganador': ganadores[0],
+            'tipo_ganador': 'unico'
+        }
+    elif len(ganadores) == len(analisis_codigos):
+        return {
+            'ganador': None,
+            'tipo_ganador': 'empate_todos'
+        }
+    else:
+        return {
+            'ganador': None,
+            'tipo_ganador': 'empate_multiple'
+        }
+
+
+def determinar_confianza_general(confianzas: List[str]) -> str:
+    """
+    Determina la confianza general del análisis grupal
+    Toma la confianza más baja de todas
+    """
+    orden_confianza = {
+        'Baja - Análisis genérico': 1,
+        'Baja': 2,
+        'Media': 3,
+        'Alta': 4
+    }
+    
+    confianza_minima = min(confianzas, key=lambda c: orden_confianza.get(c, 0))
+    return confianza_minima

@@ -254,13 +254,35 @@ CREATE TABLE resultados_eficiencia_individual (
 -- Tabla de resultados de eficiencia para comparaciones grupales
 CREATE TABLE resultados_eficiencia_grupal (
     id_resultado_eficiencia_grupal SERIAL PRIMARY KEY,
-    id_comparacion_grupal INTEGER NOT NULL REFERENCES comparaciones_grupales(id_comparacion_grupal) ON DELETE CASCADE,
-    id_codigo_fuente INTEGER NOT NULL REFERENCES codigos_fuente(id_codigo_fuente) ON DELETE CASCADE,
-    complejidad_temporal VARCHAR(50),
-    complejidad_espacial VARCHAR(50),
-    puntuacion_eficiencia INTEGER CHECK (puntuacion_eficiencia >= 0 AND puntuacion_eficiencia <= 100),
-    es_mas_eficiente BOOLEAN
+    id_comparacion_grupal INTEGER NOT NULL REFERENCES comparaciones_grupales(id) ON DELETE CASCADE,
+    fecha_analisis TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    total_codigos INTEGER NOT NULL,
+    ganador INTEGER, -- orden del código ganador (1, 2, 3, etc.) o NULL si empate
+    tipo_ganador VARCHAR(20) CHECK (tipo_ganador IN ('unico', 'empate_multiple', 'empate_todos')),
+    complejidad_temporal_mejor VARCHAR(50),
+    complejidad_temporal_peor VARCHAR(50),
+    nivel_anidamiento_maximo INTEGER,
+    nivel_anidamiento_minimo INTEGER,
+    confianza_analisis_general VARCHAR(50)
 );
+
+
+CREATE TABLE detalles_codigo_eficiencia_grupal (
+    id_detalle_codigo_eficiencia_grupal SERIAL PRIMARY KEY,
+    id_resultado_eficiencia_grupal INTEGER NOT NULL REFERENCES resultados_eficiencia_grupal(id_resultado_eficiencia_grupal) ON DELETE CASCADE,
+    id_codigo_fuente INTEGER NOT NULL REFERENCES codigos_fuente(id) ON DELETE CASCADE,
+    orden INTEGER NOT NULL,
+    complejidad_temporal VARCHAR(50) NOT NULL,
+    complejidad_espacial VARCHAR(50) NOT NULL,
+    nivel_anidamiento INTEGER DEFAULT 0,
+    patrones_detectados JSONB,
+    estructuras_datos JSONB,
+    confianza_analisis VARCHAR(50),
+    es_ganador BOOLEAN DEFAULT FALSE,
+    es_empate BOOLEAN DEFAULT FALSE,
+    ranking_eficiencia INTEGER -- 1 es el más eficiente
+);
+
 
 -- Insertar algunos roles básicos
 INSERT INTO roles (nombre, descripcion) VALUES 

@@ -222,16 +222,41 @@ class ProveedoresIa(models.Model):
         app_label = 'app'
 
 class ResultadosEficienciaGrupal(models.Model):
-    comparacion_grupal = models.ForeignKey(ComparacionesGrupales, models.DO_NOTHING)
-    codigo_fuente = models.ForeignKey(CodigosFuente, models.DO_NOTHING)
-    complejidad_temporal = models.CharField(max_length=50, blank=True, null=True)
-    complejidad_espacial = models.CharField(max_length=50, blank=True, null=True)
-    puntuacion_eficiencia = models.IntegerField(blank=True, null=True)
-    es_mas_eficiente = models.BooleanField(blank=True, null=True)
+    id_resultado_eficiencia_grupal = models.AutoField(primary_key=True)
+    id_comparacion_grupal = models.ForeignKey(ComparacionesGrupales, models.DO_NOTHING, db_column='id_comparacion_grupal')
+    fecha_analisis = models.DateTimeField(blank=True, null=True)
+    total_codigos = models.IntegerField()
+    ganador = models.IntegerField(blank=True, null=True)
+    tipo_ganador = models.CharField(max_length=20, blank=True, null=True)
+    complejidad_temporal_mejor = models.CharField(max_length=50, blank=True, null=True)
+    complejidad_temporal_peor = models.CharField(max_length=50, blank=True, null=True)
+    nivel_anidamiento_maximo = models.IntegerField(blank=True, null=True)
+    nivel_anidamiento_minimo = models.IntegerField(blank=True, null=True)
+    confianza_analisis_general = models.CharField(max_length=50, blank=True, null=True)
 
     class Meta:
         managed = False
         db_table = 'resultados_eficiencia_grupal'
+        app_label = 'app'
+
+class DetallesCodigoEficienciaGrupal(models.Model):
+    id_detalle_codigo_eficiencia_grupal = models.AutoField(primary_key=True)
+    id_resultado_eficiencia_grupal = models.ForeignKey('ResultadosEficienciaGrupal', models.DO_NOTHING, db_column='id_resultado_eficiencia_grupal')
+    id_codigo_fuente = models.ForeignKey(CodigosFuente, models.DO_NOTHING, db_column='id_codigo_fuente')
+    orden = models.IntegerField()
+    complejidad_temporal = models.CharField(max_length=50)
+    complejidad_espacial = models.CharField(max_length=50)
+    nivel_anidamiento = models.IntegerField(blank=True, null=True)
+    patrones_detectados = models.JSONField(blank=True, null=True)
+    estructuras_datos = models.JSONField(blank=True, null=True)
+    confianza_analisis = models.CharField(max_length=50, blank=True, null=True)
+    es_ganador = models.BooleanField(blank=True, null=True)
+    es_empate = models.BooleanField(blank=True, null=True)
+    ranking_eficiencia = models.IntegerField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'detalles_codigo_eficiencia_grupal'
         app_label = 'app'
 
 class ResultadosEficienciaIndividual(models.Model):
