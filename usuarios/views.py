@@ -3038,8 +3038,6 @@ def determinar_confianza_general(confianzas: List[str]) -> str:
     confianza_minima = min(confianzas, key=lambda c: orden_confianza.get(c, 0))
     return confianza_minima
 
-
-
 @csrf_exempt
 @require_http_methods(["POST"])
 def crear_comentario_eficiencia_grupal(request, id_resultado_eficiencia_grupal):
@@ -3429,15 +3427,30 @@ def crear_comentario_eficiencia_grupal(request, id_resultado_eficiencia_grupal):
                 'tiempo_respuesta_segundos': round(tiempo_respuesta, 2),
                 'tokens_usados': tokens_usados
             },
-            'resumen_analisis': {
-                'mejor_codigo_orden': comentario_grupal.mejor_codigo_orden,
-                'peor_codigo_orden': comentario_grupal.peor_codigo_orden,
-                'ranking': comentario_grupal.ranking_ia,
-                'patrones_eficientes_encontrados': len(comentario_grupal.patrones_eficientes or []),
-                'patrones_ineficientes_encontrados': len(comentario_grupal.patrones_ineficientes or [])
+            'analisis_completo': {
+                'resumen_comparativo': comentario_grupal.resumen_comparativo,
+                'mejor_codigo': {
+                    'orden': comentario_grupal.mejor_codigo_orden,
+                    'razon': comentario_grupal.mejor_codigo_razon
+                },
+                'peor_codigo': {
+                    'orden': comentario_grupal.peor_codigo_orden,
+                    'razon': comentario_grupal.peor_codigo_razon
+                },
+                'patrones_eficientes': comentario_grupal.patrones_eficientes,
+                'patrones_ineficientes': comentario_grupal.patrones_ineficientes,
+                'recomendaciones_generales': comentario_grupal.recomendaciones_generales,
+                'ranking_ia': comentario_grupal.ranking_ia
             },
-            'comentarios_individuales': comentarios_creados,
-            'resumen_comparativo_preview': comentario_grupal.resumen_comparativo[:300] + '...' if len(comentario_grupal.resumen_comparativo) > 300 else comentario_grupal.resumen_comparativo
+            'comentarios_individuales': [
+                {
+                    'id': com['id'],
+                    'orden': com['orden'],
+                    'nombre_archivo': com['nombre_archivo'],
+                    'nota_eficiencia': com['nota_eficiencia']
+                } for com in comentarios_creados
+            ],
+            'respuesta_completa_ia': datos_ia
         }, status=200)
         
     except json.JSONDecodeError:
