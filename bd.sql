@@ -188,8 +188,8 @@ CREATE TABLE comparaciones_individuales (
 CREATE TABLE comparaciones_grupales (
     id_comparacion_grupal SERIAL PRIMARY KEY,
     id_usuario INTEGER NOT NULL REFERENCES usuarios(id),
-    id_modelo_ia INTEGER REFERENCES modelos_ia(id_modelo_ia),
-    id_lenguaje INTEGER NOT NULL REFERENCES lenguajes(id_lenguaje),
+    id_modelo_ia INTEGER REFERENCES modelos_ia(id),
+    id_lenguaje INTEGER NOT NULL REFERENCES lenguajes(id),
     nombre_comparacion VARCHAR(200),
     estado VARCHAR(20) DEFAULT 'Reciente',
     fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
