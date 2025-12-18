@@ -7,6 +7,7 @@ from django.db import transaction
 from datetime import datetime, timedelta
 import jwt,json,base64,os
 from django.conf import settings
+from usuarios.models import ComentariosCodigoGrupal, ComentariosIaGrupal
 from usuarios.models import *
 from usuarios.models import ComparacionesGrupales, ComparacionesIndividuales, Lenguajes, ModelosIa, ProveedoresIa
 from django.utils import timezone
@@ -3036,3 +3037,426 @@ def determinar_confianza_general(confianzas: List[str]) -> str:
     
     confianza_minima = min(confianzas, key=lambda c: orden_confianza.get(c, 0))
     return confianza_minima
+
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def crear_comentario_eficiencia_grupal(request, id_resultado_eficiencia_grupal):
+    try:
+        # 1. Obtener el resultado de eficiencia grupal
+        try:
+            resultado_eficiencia = ResultadosEficienciaGrupal.objects.select_related(
+                'id_comparacion_grupal',
+                'id_comparacion_grupal__usuario',
+                'id_comparacion_grupal__lenguaje',
+                'id_comparacion_grupal__id_modelo_ia'
+            ).get(id_resultado_eficiencia_grupal=id_resultado_eficiencia_grupal)
+        except ResultadosEficienciaGrupal.DoesNotExist:
+            return JsonResponse({
+                'error': f'Resultado de eficiencia grupal {id_resultado_eficiencia_grupal} no encontrado'
+            }, status=404)
+        
+        comparacion = resultado_eficiencia.id_comparacion_grupal
+        
+        # 2. Obtener todos los códigos y sus detalles de eficiencia
+        codigos_fuente = CodigosFuente.objects.filter(
+            comparacion_grupal=comparacion
+        ).order_by('orden')
+        
+        detalles_eficiencia = DetallesCodigoEficienciaGrupal.objects.filter(
+            id_resultado_eficiencia_grupal=resultado_eficiencia
+        ).select_related('id_codigo_fuente').order_by('orden')
+        
+        if not codigos_fuente.exists():
+            return JsonResponse({
+                'error': 'No hay códigos fuente para esta comparación grupal'
+            }, status=404)
+        
+        # 3. Obtener el modelo IA
+        if not comparacion.id_modelo_ia:
+            return JsonResponse({
+                'error': 'La comparación no tiene un modelo de IA asignado'
+            }, status=400)
+        
+        modelo_ia = comparacion.id_modelo_ia
+        
+        # 4. Obtener la configuración según el tipo de modelo
+        config = None
+        proveedor = None
+        prompt_eficiencia = None
+        
+        # Intentar obtener configuración de cada proveedor
+        if not config:
+            try:
+                config = ConfiguracionClaude.objects.get(
+                    id_modelo_ia_id=modelo_ia.id,
+                    activo=True
+                )
+                proveedor = 'Claude'
+                prompt_eficiencia = PromptEficienciaAlgoritmica.objects.get(
+                    id_prompt_eficiencia=config.id_prompt_eficiencia_id
+                )
+            except (ConfiguracionClaude.DoesNotExist, PromptEficienciaAlgoritmica.DoesNotExist):
+                pass
+        
+        if not config:
+            try:
+                config = ConfiguracionOpenai.objects.get(
+                    id_modelo_ia_id=modelo_ia.id,
+                    activo=True
+                )
+                proveedor = 'OpenAI'
+                prompt_eficiencia = PromptEficienciaAlgoritmica.objects.get(
+                    id_prompt_eficiencia=config.id_prompt_eficiencia_id
+                )
+            except (ConfiguracionOpenai.DoesNotExist, PromptEficienciaAlgoritmica.DoesNotExist):
+                pass
+        
+        if not config:
+            try:
+                config = ConfiguracionGemini.objects.get(
+                    id_modelo_ia_id=modelo_ia.id,
+                    activo=True
+                )
+                proveedor = 'Gemini'
+                prompt_eficiencia = PromptEficienciaAlgoritmica.objects.get(
+                    id_prompt_eficiencia=config.id_prompt_eficiencia_id
+                )
+            except (ConfiguracionGemini.DoesNotExist, PromptEficienciaAlgoritmica.DoesNotExist):
+                pass
+        
+        if not config:
+            try:
+                config = ConfiguracionDeepseek.objects.get(
+                    id_modelo_ia_id=modelo_ia.id,
+                    activo=True
+                )
+                proveedor = 'DeepSeek'
+                prompt_eficiencia = PromptEficienciaAlgoritmica.objects.get(
+                    id_prompt_eficiencia=config.id_prompt_eficiencia_id
+                )
+            except (ConfiguracionDeepseek.DoesNotExist, PromptEficienciaAlgoritmica.DoesNotExist):
+                pass
+        
+        if not config:
+            return JsonResponse({
+                'error': 'No hay configuración activa para este modelo de IA'
+            }, status=404)
+        
+        # 5. Verificar que el prompt de eficiencia exista, esté activo y sea de tipo 'grupal'
+        # Buscar el prompt de tipo grupal más reciente y activo
+        prompt_eficiencia = PromptEficienciaAlgoritmica.objects.filter(
+            tipo_analisis='grupal',
+            activo=True
+        ).order_by('-fecha_creacion').first()
+        
+        if not prompt_eficiencia:
+            return JsonResponse({
+                'error': 'No hay prompt de eficiencia de tipo grupal activo en el sistema'
+            }, status=400)
+        
+        # 6. Construir el array de códigos para el prompt
+        codigos_array_texto = ""
+        for idx, codigo in enumerate(codigos_fuente, 1):
+            codigos_array_texto += f"\n--- CÓDIGO {idx} ---\n"
+            codigos_array_texto += f"Nombre archivo: {codigo.nombre_archivo or 'Sin nombre'}\n"
+            codigos_array_texto += f"Orden: {codigo.orden}\n"
+            codigos_array_texto += f"Código:\n{codigo.codigo}\n"
+        
+        # 7. Construir los resultados de eficiencia para el prompt
+        resultados_eficiencia_texto = ""
+        for detalle in detalles_eficiencia:
+            resultados_eficiencia_texto += f"\n--- CÓDIGO {detalle.orden} ---\n"
+            resultados_eficiencia_texto += f"Nombre archivo: {detalle.id_codigo_fuente.nombre_archivo or 'Sin nombre'}\n"
+            resultados_eficiencia_texto += f"Complejidad Temporal: {detalle.complejidad_temporal}\n"
+            resultados_eficiencia_texto += f"Complejidad Espacial: {detalle.complejidad_espacial}\n"
+            resultados_eficiencia_texto += f"Nivel de Anidamiento: {detalle.nivel_anidamiento}\n"
+            resultados_eficiencia_texto += f"Es Ganador: {'Sí' if detalle.es_ganador else 'No'}\n"
+            resultados_eficiencia_texto += f"Es Empate: {'Sí' if detalle.es_empate else 'No'}\n"
+            resultados_eficiencia_texto += f"Ranking: {detalle.ranking_eficiencia or 'N/A'}\n"
+            resultados_eficiencia_texto += f"Confianza: {detalle.confianza_analisis or 'N/A'}\n"
+            if detalle.patrones_detectados:
+                resultados_eficiencia_texto += f"Patrones detectados: {json.dumps(detalle.patrones_detectados, indent=2)}\n"
+            if detalle.estructuras_datos:
+                resultados_eficiencia_texto += f"Estructuras de datos: {json.dumps(detalle.estructuras_datos, indent=2)}\n"
+        
+        # 8. Reemplazar placeholders en el prompt
+        prompt_procesado = prompt_eficiencia.template_prompt.format(
+            codigos_array=codigos_array_texto,
+            resultados_eficiencia=resultados_eficiencia_texto,
+            total_codigos=resultado_eficiencia.total_codigos,
+            lenguaje=comparacion.lenguaje.nombre if comparacion.lenguaje else 'No especificado'
+        )
+        
+        # 9. Preparar headers y payload según el proveedor
+        headers = {}
+        payload = {}
+        endpoint_url = config.endpoint_url
+        
+        if proveedor == 'Claude':
+            headers = {
+                'Content-Type': 'application/json',
+                'x-api-key': config.api_key,
+                'anthropic-version': config.anthropic_version
+            }
+            payload = {
+                'model': config.model_name,
+                'max_tokens': config.max_tokens,
+                'messages': [
+                    {
+                        'role': 'user',
+                        'content': prompt_procesado
+                    }
+                ]
+            }
+            
+        elif proveedor == 'OpenAI':
+            headers = {
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {config.api_key}'
+            }
+            payload = {
+                'model': config.model_name,
+                'messages': [
+                    {
+                        'role': 'user',
+                        'content': prompt_procesado
+                    }
+                ],
+                'max_tokens': config.max_tokens,
+                'temperature': float(config.temperature)
+            }
+            
+        elif proveedor == 'Gemini':
+            headers = {
+                'Content-Type': 'application/json'
+            }
+            endpoint_url = f"{config.endpoint_url}/{config.model_name}:generateContent?key={config.api_key}"
+            payload = {
+                'contents': [
+                    {
+                        'parts': [
+                            {
+                                'text': prompt_procesado
+                            }
+                        ]
+                    }
+                ],
+                'generationConfig': {
+                    'maxOutputTokens': config.max_tokens,
+                    'temperature': float(config.temperature)
+                }
+            }
+            
+        elif proveedor == 'DeepSeek':
+            headers = {
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {config.api_key}'
+            }
+            payload = {
+                'model': config.model_name,
+                'messages': [
+                    {
+                        'role': 'user',
+                        'content': prompt_procesado
+                    }
+                ],
+                'max_tokens': config.max_tokens,
+                'temperature': float(config.temperature)
+            }
+        
+        # 10. Hacer la petición a la IA
+        inicio = time.time()
+        
+        response = requests.post(
+            endpoint_url,
+            headers=headers,
+            json=payload,
+            timeout=180  # Más tiempo para análisis grupal
+        )
+        
+        tiempo_respuesta = time.time() - inicio
+        
+        # 11. Verificar respuesta
+        if response.status_code != 200:
+            return JsonResponse({
+                'error': f'Error de la API {proveedor}: {response.status_code}',
+                'detalle': response.text
+            }, status=response.status_code)
+        
+        # 12. Extraer la respuesta según el proveedor
+        response_data = response.json()
+        respuesta_ia = None
+        tokens_usados = 0
+        
+        if proveedor == 'Claude':
+            respuesta_ia = response_data['content'][0]['text']
+            tokens_usados = (
+                response_data.get('usage', {}).get('input_tokens', 0) + 
+                response_data.get('usage', {}).get('output_tokens', 0)
+            )
+            
+        elif proveedor == 'OpenAI':
+            respuesta_ia = response_data['choices'][0]['message']['content']
+            tokens_usados = response_data.get('usage', {}).get('total_tokens', 0)
+            
+        elif proveedor == 'Gemini':
+            respuesta_ia = response_data['candidates'][0]['content']['parts'][0]['text']
+            tokens_usados = (
+                response_data.get('usageMetadata', {}).get('promptTokenCount', 0) +
+                response_data.get('usageMetadata', {}).get('candidatesTokenCount', 0)
+            )
+            
+        elif proveedor == 'DeepSeek':
+            respuesta_ia = response_data['choices'][0]['message']['content']
+            tokens_usados = response_data.get('usage', {}).get('total_tokens', 0)
+        
+        # 13. Parsear el JSON de la respuesta
+        try:
+            # Limpiar markdown si viene con ```json
+            respuesta_limpia = respuesta_ia.strip()
+            if respuesta_limpia.startswith('```json'):
+                respuesta_limpia = respuesta_limpia[7:]
+            if respuesta_limpia.startswith('```'):
+                respuesta_limpia = respuesta_limpia[3:]
+            if respuesta_limpia.endswith('```'):
+                respuesta_limpia = respuesta_limpia[:-3]
+            
+            datos_ia = json.loads(respuesta_limpia.strip())
+        except json.JSONDecodeError as e:
+            return JsonResponse({
+                'error': 'La IA no devolvió un JSON válido',
+                'detalle': str(e),
+                'respuesta_ia': respuesta_ia[:500]
+            }, status=500)
+        
+        # 14. Guardar en la base de datos
+        # Eliminar comentario anterior si existe
+        ComentariosIaGrupal.objects.filter(
+            id_resultado_eficiencia_grupal=resultado_eficiencia
+        ).delete()
+        
+        # Extraer datos del análisis comparativo
+        analisis_comp = datos_ia.get('analisis_comparativo', {})
+        mejor_codigo = analisis_comp.get('mejor_codigo', {})
+        peor_codigo = analisis_comp.get('peor_codigo', {})
+        patrones = datos_ia.get('patrones_comunes', {})
+        
+        # Crear el comentario grupal principal
+        comentario_grupal = ComentariosIaGrupal.objects.create(
+            id_comparacion_grupal=comparacion,
+            id_resultado_eficiencia_grupal=resultado_eficiencia,
+            id_prompt_eficiencia=prompt_eficiencia,
+            resumen_comparativo=analisis_comp.get('resumen_comparativo', ''),
+            mejor_codigo_orden=mejor_codigo.get('orden'),
+            mejor_codigo_razon=mejor_codigo.get('razon', ''),
+            peor_codigo_orden=peor_codigo.get('orden'),
+            peor_codigo_razon=peor_codigo.get('razon', ''),
+            patrones_eficientes=patrones.get('eficientes', []),
+            patrones_ineficientes=patrones.get('ineficientes', []),
+            recomendaciones_generales=datos_ia.get('recomendaciones_generales', []),
+            ranking_ia=datos_ia.get('ranking_eficiencia', []),
+            respuesta_completa_ia=datos_ia
+        )
+        
+        # 15. Guardar comentarios individuales de cada código
+        comentarios_individuales = datos_ia.get('comentarios_individuales', [])
+        comentarios_creados = []
+        
+        for comentario_data in comentarios_individuales:
+            orden = comentario_data.get('orden')
+            
+            # Buscar el código fuente correspondiente
+            try:
+                codigo_fuente = CodigosFuente.objects.get(
+                    comparacion_grupal=comparacion,
+                    orden=orden
+                )
+                
+                # Buscar el detalle de eficiencia correspondiente
+                detalle_eficiencia = DetallesCodigoEficienciaGrupal.objects.get(
+                    id_resultado_eficiencia_grupal=resultado_eficiencia,
+                    orden=orden
+                )
+                
+                # Crear el comentario individual
+                comentario_individual = ComentariosCodigoGrupal.objects.create(
+                    id_comentario_grupal=comentario_grupal,
+                    id_codigo_fuente=codigo_fuente,
+                    id_detalle_codigo_eficiencia_grupal=detalle_eficiencia,
+                    orden=orden,
+                    nombre_archivo=comentario_data.get('nombre_archivo', codigo_fuente.nombre_archivo),
+                    comentario_general=comentario_data.get('comentario_general', ''),
+                    puntos_fuertes=comentario_data.get('puntos_fuertes', []),
+                    puntos_debiles=comentario_data.get('puntos_debiles', []),
+                    recomendaciones=comentario_data.get('recomendaciones', []),
+                    nota_eficiencia=comentario_data.get('nota_eficiencia')
+                )
+                
+                comentarios_creados.append({
+                    'id': comentario_individual.id_comentario_codigo_grupal,
+                    'orden': orden,
+                    'nombre_archivo': comentario_individual.nombre_archivo,
+                    'nota_eficiencia': float(comentario_individual.nota_eficiencia) if comentario_individual.nota_eficiencia else None
+                })
+                
+            except CodigosFuente.DoesNotExist:
+                print(f"Advertencia: Código con orden {orden} no encontrado")
+                continue
+            except DetallesCodigoEficienciaGrupal.DoesNotExist:
+                print(f"Advertencia: Detalle de eficiencia con orden {orden} no encontrado")
+                continue
+        
+        # 16. Retornar resultado
+        return JsonResponse({
+            'mensaje': 'Comentarios de eficiencia grupal generados exitosamente',
+            'comentario_grupal_id': comentario_grupal.id_comentario_grupal,
+            'resultado_eficiencia_grupal_id': id_resultado_eficiencia_grupal,
+            'comparacion_grupal_id': comparacion.id,
+            'modelo_usado': modelo_ia.nombre,
+            'proveedor': proveedor,
+            'model_name': config.model_name,
+            'prompt_usado': {
+                'id': prompt_eficiencia.id_prompt_eficiencia,
+                'version': prompt_eficiencia.version,
+                'descripcion': prompt_eficiencia.descripcion,
+                'tipo_analisis': prompt_eficiencia.tipo_analisis
+            },
+            'estadisticas': {
+                'total_codigos_analizados': resultado_eficiencia.total_codigos,
+                'comentarios_individuales_creados': len(comentarios_creados),
+                'tiempo_respuesta_segundos': round(tiempo_respuesta, 2),
+                'tokens_usados': tokens_usados
+            },
+            'resumen_analisis': {
+                'mejor_codigo_orden': comentario_grupal.mejor_codigo_orden,
+                'peor_codigo_orden': comentario_grupal.peor_codigo_orden,
+                'ranking': comentario_grupal.ranking_ia,
+                'patrones_eficientes_encontrados': len(comentario_grupal.patrones_eficientes or []),
+                'patrones_ineficientes_encontrados': len(comentario_grupal.patrones_ineficientes or [])
+            },
+            'comentarios_individuales': comentarios_creados,
+            'resumen_comparativo_preview': comentario_grupal.resumen_comparativo[:300] + '...' if len(comentario_grupal.resumen_comparativo) > 300 else comentario_grupal.resumen_comparativo
+        }, status=200)
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'error': 'JSON inválido en el body'
+        }, status=400)
+    except requests.Timeout:
+        return JsonResponse({
+            'error': 'Timeout al llamar a la API de IA (análisis muy extenso)'
+        }, status=504)
+    except requests.RequestException as e:
+        return JsonResponse({
+            'error': f'Error en la petición HTTP: {str(e)}'
+        }, status=500)
+    except KeyError as e:
+        return JsonResponse({
+            'error': f'Falta un campo requerido en el prompt o respuesta: {str(e)}'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'error': f'Error interno: {str(e)}'
+        }, status=500)

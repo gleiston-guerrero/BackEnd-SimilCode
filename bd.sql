@@ -192,12 +192,7 @@ CREATE TABLE comparaciones_grupales (
     id_lenguaje INTEGER NOT NULL REFERENCES lenguajes(id_lenguaje),
     nombre_comparacion VARCHAR(200),
     estado VARCHAR(20) DEFAULT 'Reciente',
-    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
-    CONSTRAINT check_solo_un_modelo CHECK (
-        (id_modelo_ia IS NOT NULL AND id_modelo_ia_usuario IS NULL) OR
-        (id_modelo_ia IS NULL AND id_modelo_ia_usuario IS NOT NULL)
-    )
+    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Tabla de códigos fuente para comparaciones grupales
@@ -283,6 +278,42 @@ CREATE TABLE detalles_codigo_eficiencia_grupal (
     ranking_eficiencia INTEGER -- 1 es el más eficiente
 );
 
+CREATE TABLE comentarios_ia_grupal (
+    id_comentario_grupal SERIAL PRIMARY KEY,
+    id_comparacion_grupal INTEGER NOT NULL REFERENCES comparaciones_grupales(id) ON DELETE CASCADE,
+    id_resultado_eficiencia_grupal INTEGER NOT NULL REFERENCES resultados_eficiencia_grupal(id_resultado_eficiencia_grupal) ON DELETE CASCADE,
+    id_prompt_eficiencia INTEGER REFERENCES prompt_eficiencia_algoritmica(id_prompt_eficiencia),
+    resumen_comparativo TEXT,
+    mejor_codigo_orden INTEGER,
+    mejor_codigo_razon TEXT,
+    peor_codigo_orden INTEGER,
+    peor_codigo_razon TEXT,
+    patrones_eficientes JSONB, -- Array de strings
+    patrones_ineficientes JSONB, -- Array de strings
+    recomendaciones_generales JSONB, -- Array de strings
+    ranking_ia JSONB, -- Array con el orden [1, 3, 2, ...]
+    respuesta_completa_ia JSONB,
+    fecha_analisis TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- =====================================================
+-- 4. TABLA PARA COMENTARIOS INDIVIDUALES DENTRO DEL ANÁLISIS GRUPAL
+-- =====================================================
+
+CREATE TABLE comentarios_codigo_grupal (
+    id_comentario_codigo_grupal SERIAL PRIMARY KEY,
+    id_comentario_grupal INTEGER NOT NULL REFERENCES comentarios_ia_grupal(id_comentario_grupal) ON DELETE CASCADE,
+    id_codigo_fuente INTEGER NOT NULL REFERENCES codigos_fuente(id) ON DELETE CASCADE,
+    id_detalle_codigo_eficiencia_grupal INTEGER REFERENCES detalles_codigo_eficiencia_grupal(id_detalle_codigo_eficiencia_grupal) ON DELETE CASCADE,
+    orden INTEGER NOT NULL,
+    nombre_archivo VARCHAR(200),
+    comentario_general TEXT NOT NULL,
+    puntos_fuertes JSONB, -- Array de strings
+    puntos_debiles JSONB, -- Array de strings
+    recomendaciones JSONB, -- Array de strings
+    nota_eficiencia DECIMAL(3,1) CHECK (nota_eficiencia >= 0 AND nota_eficiencia <= 10),
+    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
 -- Insertar algunos roles básicos
 INSERT INTO roles (nombre, descripcion) VALUES 

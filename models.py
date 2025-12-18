@@ -219,6 +219,46 @@ class ResultadosEficienciaIndividual(models.Model):
         managed = False
         db_table = 'resultados_eficiencia_individual'
         app_label = 'app'
+
+class ComentariosIaGrupal(models.Model):
+    id_comentario_grupal = models.AutoField(primary_key=True)
+    id_comparacion_grupal = models.ForeignKey('ComparacionesGrupales', models.DO_NOTHING, db_column='id_comparacion_grupal')
+    id_resultado_eficiencia_grupal = models.ForeignKey('ResultadosEficienciaGrupal', models.DO_NOTHING, db_column='id_resultado_eficiencia_grupal')
+    id_prompt_eficiencia = models.ForeignKey('PromptEficienciaAlgoritmica', models.DO_NOTHING, db_column='id_prompt_eficiencia', blank=True, null=True)
+    resumen_comparativo = models.TextField(blank=True, null=True)
+    mejor_codigo_orden = models.IntegerField(blank=True, null=True)
+    mejor_codigo_razon = models.TextField(blank=True, null=True)
+    peor_codigo_orden = models.IntegerField(blank=True, null=True)
+    peor_codigo_razon = models.TextField(blank=True, null=True)
+    patrones_eficientes = models.JSONField(blank=True, null=True)
+    patrones_ineficientes = models.JSONField(blank=True, null=True)
+    recomendaciones_generales = models.JSONField(blank=True, null=True)
+    ranking_ia = models.JSONField(blank=True, null=True)
+    respuesta_completa_ia = models.JSONField(blank=True, null=True)
+    fecha_analisis = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'comentarios_ia_grupal'
+        app_label = 'app'
+
+class ComentariosCodigoGrupal(models.Model):
+    id_comentario_codigo_grupal = models.AutoField(primary_key=True)
+    id_comentario_grupal = models.ForeignKey('ComentariosIaGrupal', models.DO_NOTHING, db_column='id_comentario_grupal')
+    id_codigo_fuente = models.ForeignKey(CodigosFuente, models.DO_NOTHING, db_column='id_codigo_fuente')
+    id_detalle_codigo_eficiencia_grupal = models.ForeignKey('DetallesCodigoEficienciaGrupal', models.DO_NOTHING, db_column='id_detalle_codigo_eficiencia_grupal', blank=True, null=True)
+    orden = models.IntegerField()
+    nombre_archivo = models.CharField(max_length=200, blank=True, null=True)
+    comentario_general = models.TextField()
+    puntos_fuertes = models.JSONField(blank=True, null=True)
+    puntos_debiles = models.JSONField(blank=True, null=True)
+    recomendaciones = models.JSONField(blank=True, null=True)
+    nota_eficiencia = models.DecimalField(max_digits=3, decimal_places=1, blank=True, null=True)
+    fecha_creacion = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'comentarios_codigo_grupal'
         app_label = 'app'
 
 class ResultadosSimilitudGrupal(models.Model):

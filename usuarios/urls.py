@@ -33,5 +33,6 @@ urlpatterns = [
     path('mostrar_resultados_eficiencia_individual/<int:comparacion_id>/', views.obtener_resultados_eficiencia_individual, name="obtener_resultados_eficiencia_individual"),
     path('mostrar_comentarios_eficiencia_individual/<int:comparacion_id>/', views.obtener_comentarios_eficiencia_individual, name="obtener_comentarios_eficiencia_individual"),
     path('crear_comparacion_grupal_ia/<int:id_comparacion_grupal>/', views.crear_comparacion_grupal_ia, name="crear_comparacion_grupal_ia"),
-    path('analisis_big_o_grupal/<int:comparacion_grupal_id>/', views.analizar_big_o_grupal, name='analisis_big_o_grupal')
+    path('analisis_big_o_grupal/<int:comparacion_grupal_id>/', views.analizar_big_o_grupal, name='analisis_big_o_grupal'),
+    path('crear_comentario_eficiencia_grupal/<int:id_resultado_eficiencia_grupal>/', views.crear_comentario_eficiencia_grupal, name='crear_comentario_eficiencia_grupal'),
 ]
