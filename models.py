@@ -262,11 +262,11 @@ class ComentariosCodigoGrupal(models.Model):
         app_label = 'app'
 
 class ResultadosSimilitudGrupal(models.Model):
-    comparacion_grupal = models.ForeignKey(ComparacionesGrupales, models.DO_NOTHING)
-    codigo_fuente_1 = models.ForeignKey(CodigosFuente, models.DO_NOTHING)
-    codigo_fuente_2 = models.ForeignKey(CodigosFuente, models.DO_NOTHING, related_name='resultadossimilitudgrupal_codigo_fuente_2_set')
-    porcentaje_similitud = models.DecimalField(max_digits=5, decimal_places=2)
-    explicacion = models.TextField(blank=True, null=True)
+    id_resultado_similitud_grupal = models.AutoField(primary_key=True)
+    id_comparacion_grupal = models.ForeignKey(ComparacionesGrupales, models.DO_NOTHING, db_column='id_comparacion_grupal')
+    respuesta_completa = models.TextField()
+    tokens_usados = models.IntegerField(blank=True, null=True)
+    tiempo_respuesta_segundos = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
 
     class Meta:
         managed = False
