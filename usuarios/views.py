@@ -7,7 +7,7 @@ from django.db import transaction
 from datetime import datetime, timedelta
 import jwt,json,base64,os
 from django.conf import settings
-from usuarios.models import ComentariosCodigoGrupal, ComentariosIaGrupal
+from usuarios.models import ComentariosCodigoGrupal, ComentariosIaGrupal,ComparacionesPareadas
 from usuarios.models import *
 from usuarios.models import ComparacionesGrupales, ComparacionesIndividuales, Lenguajes, ModelosIa, ProveedoresIa
 from django.utils import timezone
@@ -2526,7 +2526,6 @@ def crear_comparacion_grupal_ia(request, id_comparacion_grupal):
             }, status=404)
         
         # 2. Obtener todos los códigos fuente asociados
-        # Nota: usar el nombre exacto del campo FK según tu modelo
         codigos_fuente = CodigosFuente.objects.filter(
             comparacion_grupal_id=id_comparacion_grupal
         ).order_by('orden')
@@ -2671,7 +2670,6 @@ def crear_comparacion_grupal_ia(request, id_comparacion_grupal):
             headers = {
                 'Content-Type': 'application/json'
             }
-            # Gemini usa la API key en la URL
             endpoint_url = f"{config.endpoint_url}/{config.model_name}:generateContent?key={config.api_key}"
             payload = {
                 'contents': [
@@ -2713,7 +2711,7 @@ def crear_comparacion_grupal_ia(request, id_comparacion_grupal):
             endpoint_url,
             headers=headers,
             json=payload,
-            timeout=120  # Timeout mayor para análisis grupal
+            timeout=120
         )
         
         tiempo_respuesta = time.time() - inicio
@@ -2752,7 +2750,147 @@ def crear_comparacion_grupal_ia(request, id_comparacion_grupal):
             respuesta_ia = response_data['choices'][0]['message']['content']
             tokens_usados = response_data.get('usage', {}).get('total_tokens', 0)
         
-        # 12. Preparar resumen de códigos comparados
+        # 12. Procesar respuesta JSON de la IA
+        datos_estructurados = None
+        resumen = None
+        mas_similares_list = []
+        
+        try:
+            # Limpiar respuesta
+            respuesta_limpia = respuesta_ia.strip()
+            
+            # Remover markdown si existe
+            if '```json' in respuesta_limpia:
+                respuesta_limpia = respuesta_limpia.split('```json')[1].split('```')[0].strip()
+            elif '```' in respuesta_limpia:
+                respuesta_limpia = respuesta_limpia.split('```')[1].split('```')[0].strip()
+            
+            # Parsear JSON
+            datos_estructurados = json.loads(respuesta_limpia)
+            resumen = datos_estructurados.get('resumen', '')
+            mas_similares_list = datos_estructurados.get('mas_similares', [])
+            
+        except json.JSONDecodeError as e:
+            print(f"Error al parsear JSON de la IA: {e}")
+            resumen = "Error al procesar respuesta estructurada de la IA"
+            mas_similares_list = []
+        
+        # Función auxiliar para determinar nivel de similitud
+        def obtener_nivel_similitud(porcentaje):
+            if porcentaje >= 91:
+                return 'muy_alta'
+            elif porcentaje >= 70:
+                return 'alta'
+            elif porcentaje >= 40:
+                return 'media'
+            elif porcentaje >= 20:
+                return 'baja'
+            else:
+                return 'muy_baja'
+        
+        # Crear diccionario de códigos por orden para búsqueda rápida
+        codigos_por_orden = {}
+        for idx, codigo in enumerate(codigos_fuente, start=1):
+            nombre_archivo = codigo.nombre_archivo or f"Código {idx}"
+            codigos_por_orden[idx] = nombre_archivo
+        
+        # 13. Guardar resultado en la base de datos
+        try:
+            # Eliminar resultado anterior si existe
+            ResultadosSimilitudGrupal.objects.filter(
+                id_comparacion_grupal=comparacion
+            ).delete()
+            
+            # Formatear mas_similares para guardarlo como texto
+            mas_similares_texto = ""
+            if mas_similares_list:
+                # Verificar si es el mensaje de "no similitudes"
+                if (len(mas_similares_list) == 1 and 
+                    mas_similares_list[0].get('par') == 'Ninguno'):
+                    mas_similares_texto = mas_similares_list[0].get('razon', 'No se encontraron similitudes notables')
+                else:
+                    mas_similares_texto = "\n".join([
+                        f"• {item['par']} ({item['similitud']}%): {item['razon']}" 
+                        for item in mas_similares_list
+                    ])
+            else:
+                mas_similares_texto = "No se encontraron similitudes notables entre los códigos"
+            
+            # Crear nuevo resultado principal
+            resultado = ResultadosSimilitudGrupal.objects.create(
+                id_comparacion_grupal=comparacion,
+                resumen_general=resumen,
+                codigos_mas_similares=mas_similares_texto,
+                respuesta_completa=respuesta_ia,
+                tokens_usados=tokens_usados,
+                tiempo_respuesta_segundos=round(tiempo_respuesta, 2)
+            )
+            
+            # Guardar comparaciones pareadas
+            comparaciones_guardadas = []
+            if datos_estructurados and 'matriz_similitud' in datos_estructurados:
+                
+                for comparacion_item in datos_estructurados['matriz_similitud']:
+                    similitud = comparacion_item.get('similitud', 0)
+                    nivel = comparacion_item.get('nivel', obtener_nivel_similitud(similitud))
+                    orden_a = comparacion_item.get('orden_a', 0)
+                    orden_b = comparacion_item.get('orden_b', 0)
+                    
+                    # Obtener nombres: primero intenta desde la IA, si no existe usa el diccionario
+                    codigo_a_nombre = comparacion_item.get('codigo_a', codigos_por_orden.get(orden_a, f'Código {orden_a}'))
+                    codigo_b_nombre = comparacion_item.get('codigo_b', codigos_por_orden.get(orden_b, f'Código {orden_b}'))
+                    
+                    comp = ComparacionesPareadas.objects.create(
+                        id_resultado_similitud_grupal=resultado,
+                        codigo_a_nombre=codigo_a_nombre,
+                        codigo_a_orden=orden_a,
+                        codigo_b_nombre=codigo_b_nombre,
+                        codigo_b_orden=orden_b,
+                        porcentaje_similitud=similitud,
+                        nivel_similitud=nivel
+                    )
+                    
+                    comparaciones_guardadas.append({
+                        'codigo_a': codigo_a_nombre,
+                        'codigo_a_nombre': codigo_a_nombre,
+                        'orden_a': orden_a,
+                        'codigo_b': codigo_b_nombre,
+                        'codigo_b_nombre': codigo_b_nombre,
+                        'orden_b': orden_b,
+                        'similitud': int(comp.porcentaje_similitud),
+                        'nivel': comp.nivel_similitud
+                    })
+            
+            mensaje_guardado = 'Resultado guardado exitosamente'
+            resultado_id = resultado.id_resultado_similitud_grupal
+            
+        except Exception as e:
+            mensaje_guardado = f'Error al guardar resultado: {str(e)}'
+            resultado_id = None
+            comparaciones_guardadas = []
+        
+        # 14. Preparar matriz para respuesta (formato tabla)
+        matriz_tabla = {}
+        if datos_estructurados and 'matriz_similitud' in datos_estructurados:
+            for item in datos_estructurados['matriz_similitud']:
+                similitud = item.get('similitud', 0)
+                nivel = item.get('nivel', obtener_nivel_similitud(similitud))
+                orden_a = item.get('orden_a', 0)
+                orden_b = item.get('orden_b', 0)
+                
+                key = f"{orden_a}-{orden_b}"
+                matriz_tabla[key] = {
+                    'similitud': similitud,
+                    'nivel': nivel
+                }
+                # Agregar la inversa también
+                key_inv = f"{orden_b}-{orden_a}"
+                matriz_tabla[key_inv] = {
+                    'similitud': similitud,
+                    'nivel': nivel
+                }
+        
+        # 15. Preparar resumen de códigos comparados
         codigos_resumen = []
         for idx, codigo in enumerate(codigos_fuente, start=1):
             nombre_archivo = codigo.nombre_archivo or f"Código {idx}"
@@ -2764,48 +2902,14 @@ def crear_comparacion_grupal_ia(request, id_comparacion_grupal):
                 'longitud': len(codigo.codigo)
             })
         
-        # 13. Guardar resultado en la base de datos
-        try:
-            # Eliminar resultado anterior si existe (para evitar duplicados)
-            ResultadosSimilitudGrupal.objects.filter(
-                id_comparacion_grupal=comparacion
-            ).delete()
-            
-            # Crear nuevo resultado
-            resultado = ResultadosSimilitudGrupal.objects.create(
-                id_comparacion_grupal=comparacion,
-                respuesta_completa=respuesta_ia,
-                tokens_usados=tokens_usados,
-                tiempo_respuesta_segundos=round(tiempo_respuesta, 2)
-            )
-            
-            mensaje_guardado = 'Resultado guardado exitosamente'
-            resultado_id = resultado.id_resultado_similitud_grupal
-            
-        except Exception as e:
-            mensaje_guardado = f'Error al guardar resultado: {str(e)}'
-            resultado_id = None
-        
-        # 14. Retornar resultado
+        # 16. Retornar resultado
         return JsonResponse({
             'mensaje': 'Comparación grupal exitosa',
             'guardado': mensaje_guardado,
-            'resultado_id': resultado_id,
-            'comparacion_grupal_id': id_comparacion_grupal,
-            'nombre_comparacion': comparacion.nombre_comparacion,
-            'lenguaje': comparacion.lenguaje.nombre if comparacion.lenguaje else 'No especificado',
-            'total_codigos': codigos_fuente.count(),
-            'modelo_usado': modelo_ia.nombre,
-            'proveedor': proveedor,
-            'model_name': config.model_name,
-            'prompt_usado': {
-                'version': prompt_config.version,
-                'descripcion': prompt_config.descripcion,
-                'tipo': getattr(prompt_config, 'tipo', 'grupal')
-            },
-            'tiempo_respuesta_segundos': round(tiempo_respuesta, 2),
-            'tokens_usados': tokens_usados,
-            'respuesta_ia': respuesta_ia,
+            'resumen_general': resumen,
+            'codigos_mas_similares': mas_similares_list,
+            'matriz_similitud': comparaciones_guardadas,
+            'matriz_tabla': matriz_tabla,
             'codigos_comparados': codigos_resumen
         }, status=200)
         

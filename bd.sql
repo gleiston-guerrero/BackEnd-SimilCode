@@ -220,10 +220,28 @@ CREATE TABLE resultados_similitud_individual (
 CREATE TABLE resultados_similitud_grupal (
     id_resultado_similitud_grupal SERIAL PRIMARY KEY,
     id_comparacion_grupal INTEGER NOT NULL REFERENCES comparaciones_grupales(id) ON DELETE CASCADE,
+    resumen_general TEXT,
+    codigos_mas_similares TEXT,
     respuesta_completa TEXT NOT NULL,
     tokens_usados INTEGER,
-    tiempo_respuesta_segundos DECIMAL(10, 2)
+    tiempo_respuesta_segundos DECIMAL(10, 2),
+    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Tabla para comparaciones pareadas
+CREATE TABLE comparaciones_pareadas (
+    id_comparacion_pareada SERIAL PRIMARY KEY,
+    id_resultado_similitud_grupal INTEGER NOT NULL REFERENCES resultados_similitud_grupal(id_resultado_similitud_grupal) ON DELETE CASCADE,
+    codigo_a_nombre VARCHAR(255) NOT NULL,
+    codigo_a_orden INTEGER NOT NULL,
+    codigo_b_nombre VARCHAR(255) NOT NULL,
+    codigo_b_orden INTEGER NOT NULL,
+    porcentaje_similitud DECIMAL(5, 2) NOT NULL,
+    nivel_similitud VARCHAR(20),
+    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_par UNIQUE(id_resultado_similitud_grupal, codigo_a_orden, codigo_b_orden)
+);
+
 
 CREATE TABLE resultados_eficiencia_individual (
     id_resultado_eficiencia_individual SERIAL PRIMARY KEY,

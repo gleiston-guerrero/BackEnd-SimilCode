@@ -287,13 +287,33 @@ class ResultadosEficienciaIndividual(models.Model):
 class ResultadosSimilitudGrupal(models.Model):
     id_resultado_similitud_grupal = models.AutoField(primary_key=True)
     id_comparacion_grupal = models.ForeignKey(ComparacionesGrupales, models.DO_NOTHING, db_column='id_comparacion_grupal')
+    resumen_general = models.TextField(blank=True, null=True)
+    codigos_mas_similares = models.TextField(blank=True, null=True)
     respuesta_completa = models.TextField()
     tokens_usados = models.IntegerField(blank=True, null=True)
     tiempo_respuesta_segundos = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    fecha_creacion = models.DateTimeField(blank=True, null=True)
 
     class Meta:
         managed = False
         db_table = 'resultados_similitud_grupal'
+        app_label = 'app'
+
+class ComparacionesPareadas(models.Model):
+    id_comparacion_pareada = models.AutoField(primary_key=True)
+    id_resultado_similitud_grupal = models.ForeignKey('ResultadosSimilitudGrupal', models.DO_NOTHING, db_column='id_resultado_similitud_grupal')
+    codigo_a_nombre = models.CharField(max_length=255)
+    codigo_a_orden = models.IntegerField()
+    codigo_b_nombre = models.CharField(max_length=255)
+    codigo_b_orden = models.IntegerField()
+    porcentaje_similitud = models.DecimalField(max_digits=5, decimal_places=2)
+    nivel_similitud = models.CharField(max_length=20, blank=True, null=True)
+    fecha_creacion = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'comparaciones_pareadas'
+        unique_together = (('id_resultado_similitud_grupal', 'codigo_a_orden', 'codigo_b_orden'),)
         app_label = 'app'
 
 class ResultadosSimilitudIndividual(models.Model):
