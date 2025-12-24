@@ -3577,3 +3577,345 @@ def crear_comentario_eficiencia_grupal(request, id_resultado_eficiencia_grupal):
         return JsonResponse({
             'error': f'Error interno: {str(e)}'
         }, status=500)
+    
+@csrf_exempt
+@require_http_methods(["GET"])
+def obtener_comparacion_grupal(request, comparacion_grupal_id):
+    """Obtener información básica de una comparación grupal y sus códigos"""
+    payload = validar_token(request)
+    
+    if not payload or 'error' in payload:
+        return JsonResponse({'error': 'Token inválido'}, status=401)
+    
+    try:
+        # Obtener la comparación grupal con sus relaciones
+        comparacion = ComparacionesGrupales.objects.select_related(
+            'usuario',
+            'lenguaje',
+            'id_modelo_ia'
+        ).get(pk=comparacion_grupal_id)
+        
+        # Obtener todos los códigos fuente asociados
+        codigos_fuente = CodigosFuente.objects.filter(
+            comparacion_grupal=comparacion
+        ).order_by('orden')
+        
+        # Serializar códigos
+        codigos_data = []
+        for codigo in codigos_fuente:
+            codigos_data.append({
+                'id': codigo.id,
+                'orden': codigo.orden,
+                'nombre_archivo': codigo.nombre_archivo,
+                'codigo': codigo.codigo,
+                'longitud': len(codigo.codigo),
+                'preview': codigo.codigo[:200] + '...' if len(codigo.codigo) > 200 else codigo.codigo
+            })
+        
+        # Preparar respuesta
+        resultado = {
+            'id': comparacion.id,
+            'nombre_comparacion': comparacion.nombre_comparacion,
+            'estado': comparacion.estado,
+            'fecha_creacion': comparacion.fecha_creacion.isoformat(),
+            'usuario_id': comparacion.usuario.id if comparacion.usuario else None,
+            'lenguaje': {
+                'id': comparacion.lenguaje.id,
+                'nombre': comparacion.lenguaje.nombre,
+                'extension': comparacion.lenguaje.extension
+            } if comparacion.lenguaje else None,
+            'modelo_ia': {
+                'id': comparacion.id_modelo_ia.id,
+                'nombre': comparacion.id_modelo_ia.nombre
+            } if comparacion.id_modelo_ia else None,
+            'total_codigos': codigos_fuente.count(),
+            'codigos': codigos_data
+        }
+        
+        return JsonResponse(resultado, status=200)
+        
+    except ComparacionesGrupales.DoesNotExist:
+        return JsonResponse({
+            'error': f'Comparación grupal con id {comparacion_grupal_id} no encontrada'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def obtener_resultado_similitud_grupal(request, comparacion_grupal_id):
+    """Obtener el resultado de análisis de similitud de una comparación grupal"""
+    payload = validar_token(request)
+    
+    if not payload or 'error' in payload:
+        return JsonResponse({'error': 'Token inválido'}, status=401)
+    
+    try:
+        # Verificar que existe la comparación
+        comparacion = ComparacionesGrupales.objects.get(pk=comparacion_grupal_id)
+        
+        # Obtener el resultado de similitud
+        try:
+            resultado_similitud = ResultadosSimilitudGrupal.objects.get(
+                id_comparacion_grupal=comparacion
+            )
+        except ResultadosSimilitudGrupal.DoesNotExist:
+            return JsonResponse({
+                'mensaje': 'No se ha realizado análisis de similitud para esta comparación',
+                'existe_analisis': False
+            }, status=200)
+        
+        # Obtener las comparaciones pareadas
+        comparaciones_pareadas = ComparacionesPareadas.objects.filter(
+            id_resultado_similitud_grupal=resultado_similitud
+        ).order_by('codigo_a_orden', 'codigo_b_orden')
+        
+        # Serializar comparaciones pareadas
+        matriz_similitud = []
+        matriz_tabla = {}
+        
+        for comp in comparaciones_pareadas:
+            similitud_int = int(comp.porcentaje_similitud)
+            
+            matriz_similitud.append({
+                'codigo_a': comp.codigo_a_nombre,
+                'orden_a': comp.codigo_a_orden,
+                'codigo_b': comp.codigo_b_nombre,
+                'orden_b': comp.codigo_b_orden,
+                'similitud': similitud_int,
+                'nivel': comp.nivel_similitud
+            })
+            
+            # Para matriz tabla (formato optimizado para frontend)
+            key = f"{comp.codigo_a_orden}-{comp.codigo_b_orden}"
+            matriz_tabla[key] = {
+                'similitud': similitud_int,
+                'nivel': comp.nivel_similitud
+            }
+            
+            # Agregar también la inversa
+            key_inv = f"{comp.codigo_b_orden}-{comp.codigo_a_orden}"
+            matriz_tabla[key_inv] = {
+                'similitud': similitud_int,
+                'nivel': comp.nivel_similitud
+            }
+        
+        # Parsear códigos más similares
+        mas_similares = []
+        if resultado_similitud.codigos_mas_similares:
+            lineas = resultado_similitud.codigos_mas_similares.strip().split('\n')
+            for linea in lineas:
+                if linea.strip():
+                    mas_similares.append(linea.strip())
+        
+        # Preparar respuesta
+        resultado = {
+            'existe_analisis': True,
+            'id_resultado': resultado_similitud.id_resultado_similitud_grupal,
+            'fecha_creacion': resultado_similitud.fecha_creacion.isoformat() if resultado_similitud.fecha_creacion else None,
+            'resumen_general': resultado_similitud.resumen_general,
+            'codigos_mas_similares': mas_similares,
+            'codigos_mas_similares_raw': resultado_similitud.codigos_mas_similares,
+            'tokens_usados': resultado_similitud.tokens_usados,
+            'tiempo_respuesta_segundos': float(resultado_similitud.tiempo_respuesta_segundos) if resultado_similitud.tiempo_respuesta_segundos else None,
+            'matriz_similitud': matriz_similitud,
+            'matriz_tabla': matriz_tabla,
+            'total_comparaciones': len(matriz_similitud),
+            'respuesta_completa_ia': resultado_similitud.respuesta_completa
+        }
+        
+        return JsonResponse(resultado, status=200)
+        
+    except ComparacionesGrupales.DoesNotExist:
+        return JsonResponse({
+            'error': f'Comparación grupal con id {comparacion_grupal_id} no encontrada'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def obtener_resultado_eficiencia_grupal(request, comparacion_grupal_id):
+    """Obtener el resultado de análisis Big O de una comparación grupal"""
+    payload = validar_token(request)
+    
+    if not payload or 'error' in payload:
+        return JsonResponse({'error': 'Token inválido'}, status=401)
+    
+    try:
+        # Verificar que existe la comparación
+        comparacion = ComparacionesGrupales.objects.get(pk=comparacion_grupal_id)
+        
+        # Obtener el resultado de eficiencia
+        try:
+            resultado_eficiencia = ResultadosEficienciaGrupal.objects.get(
+                id_comparacion_grupal=comparacion
+            )
+        except ResultadosEficienciaGrupal.DoesNotExist:
+            return JsonResponse({
+                'mensaje': 'No se ha realizado análisis de eficiencia para esta comparación',
+                'existe_analisis': False
+            }, status=200)
+        
+        # Obtener los detalles de cada código
+        detalles = DetallesCodigoEficienciaGrupal.objects.filter(
+            id_resultado_eficiencia_grupal=resultado_eficiencia
+        ).select_related('id_codigo_fuente').order_by('orden')
+        
+        # Serializar detalles
+        codigos_analizados = []
+        for detalle in detalles:
+            codigos_analizados.append({
+                'id_detalle': detalle.id_detalle_codigo_eficiencia_grupal,
+                'orden': detalle.orden,
+                'nombre_archivo': detalle.id_codigo_fuente.nombre_archivo if detalle.id_codigo_fuente else None,
+                'complejidad_temporal': detalle.complejidad_temporal,
+                'complejidad_espacial': detalle.complejidad_espacial,
+                'nivel_anidamiento': detalle.nivel_anidamiento,
+                'patrones_detectados': detalle.patrones_detectados,
+                'estructuras_datos': detalle.estructuras_datos,
+                'confianza_analisis': detalle.confianza_analisis,
+                'es_ganador': detalle.es_ganador,
+                'es_empate': detalle.es_empate,
+                'ranking_eficiencia': detalle.ranking_eficiencia
+            })
+        
+        # Preparar respuesta
+        resultado = {
+            'existe_analisis': True,
+            'id_resultado': resultado_eficiencia.id_resultado_eficiencia_grupal,
+            'fecha_analisis': resultado_eficiencia.fecha_analisis.isoformat(),
+            'total_codigos': resultado_eficiencia.total_codigos,
+            'ganador': resultado_eficiencia.ganador,
+            'tipo_ganador': resultado_eficiencia.tipo_ganador,
+            'complejidad_temporal_mejor': resultado_eficiencia.complejidad_temporal_mejor,
+            'complejidad_temporal_peor': resultado_eficiencia.complejidad_temporal_peor,
+            'nivel_anidamiento_maximo': resultado_eficiencia.nivel_anidamiento_maximo,
+            'nivel_anidamiento_minimo': resultado_eficiencia.nivel_anidamiento_minimo,
+            'confianza_analisis_general': resultado_eficiencia.confianza_analisis_general,
+            'codigos_analizados': codigos_analizados
+        }
+        
+        return JsonResponse(resultado, status=200)
+        
+    except ComparacionesGrupales.DoesNotExist:
+        return JsonResponse({
+            'error': f'Comparación grupal con id {comparacion_grupal_id} no encontrada'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def obtener_comentarios_eficiencia_grupal(request, comparacion_grupal_id):
+    """Obtener los comentarios de IA sobre eficiencia de una comparación grupal"""
+    payload = validar_token(request)
+    
+    if not payload or 'error' in payload:
+        return JsonResponse({'error': 'Token inválido'}, status=401)
+    
+    try:
+        # Verificar que existe la comparación
+        comparacion = ComparacionesGrupales.objects.get(pk=comparacion_grupal_id)
+        
+        # Obtener el resultado de eficiencia primero
+        try:
+            resultado_eficiencia = ResultadosEficienciaGrupal.objects.get(
+                id_comparacion_grupal=comparacion
+            )
+        except ResultadosEficienciaGrupal.DoesNotExist:
+            return JsonResponse({
+                'mensaje': 'No se ha realizado análisis de eficiencia para esta comparación',
+                'existe_analisis': False,
+                'existe_comentarios': False
+            }, status=200)
+        
+        # Obtener el comentario grupal
+        try:
+            comentario_grupal = ComentariosIaGrupal.objects.select_related(
+                'id_prompt_eficiencia'
+            ).get(
+                id_resultado_eficiencia_grupal=resultado_eficiencia
+            )
+        except ComentariosIaGrupal.DoesNotExist:
+            return JsonResponse({
+                'mensaje': 'No se han generado comentarios de IA para esta comparación',
+                'existe_analisis': True,
+                'existe_comentarios': False
+            }, status=200)
+        
+        # Obtener los comentarios individuales de cada código
+        comentarios_individuales = ComentariosCodigoGrupal.objects.filter(
+            id_comentario_grupal=comentario_grupal
+        ).select_related(
+            'id_codigo_fuente',
+            'id_detalle_codigo_eficiencia_grupal'
+        ).order_by('orden')
+        
+        # Serializar comentarios individuales
+        comentarios_data = []
+        for comentario in comentarios_individuales:
+            comentarios_data.append({
+                'id': comentario.id_comentario_codigo_grupal,
+                'orden': comentario.orden,
+                'nombre_archivo': comentario.nombre_archivo,
+                'comentario_general': comentario.comentario_general,
+                'puntos_fuertes': comentario.puntos_fuertes,
+                'puntos_debiles': comentario.puntos_debiles,
+                'recomendaciones': comentario.recomendaciones,
+                'nota_eficiencia': float(comentario.nota_eficiencia) if comentario.nota_eficiencia else None
+            })
+        
+        # Preparar respuesta
+        resultado = {
+            'existe_analisis': True,
+            'existe_comentarios': True,
+            'id_comentario_grupal': comentario_grupal.id_comentario_grupal,
+            'fecha_analisis': comentario_grupal.fecha_analisis.isoformat() if comentario_grupal.fecha_analisis else None,
+            'prompt_usado': {
+                'id': comentario_grupal.id_prompt_eficiencia.id_prompt_eficiencia,
+                'version': comentario_grupal.id_prompt_eficiencia.version,
+                'descripcion': comentario_grupal.id_prompt_eficiencia.descripcion,
+                'tipo_analisis': comentario_grupal.id_prompt_eficiencia.tipo_analisis
+            } if comentario_grupal.id_prompt_eficiencia else None,
+            'analisis_comparativo': {
+                'resumen_comparativo': comentario_grupal.resumen_comparativo,
+                'mejor_codigo': {
+                    'orden': comentario_grupal.mejor_codigo_orden,
+                    'razon': comentario_grupal.mejor_codigo_razon
+                },
+                'peor_codigo': {
+                    'orden': comentario_grupal.peor_codigo_orden,
+                    'razon': comentario_grupal.peor_codigo_razon
+                }
+            },
+            'patrones': {
+                'eficientes': comentario_grupal.patrones_eficientes,
+                'ineficientes': comentario_grupal.patrones_ineficientes
+            },
+            'recomendaciones_generales': comentario_grupal.recomendaciones_generales,
+            'ranking_ia': comentario_grupal.ranking_ia,
+            'comentarios_individuales': comentarios_data,
+            'total_comentarios': len(comentarios_data),
+            'respuesta_completa_ia': comentario_grupal.respuesta_completa_ia
+        }
+        
+        return JsonResponse(resultado, status=200)
+        
+    except ComparacionesGrupales.DoesNotExist:
+        return JsonResponse({
+            'error': f'Comparación grupal con id {comparacion_grupal_id} no encontrada'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e)
+        }, status=500)
