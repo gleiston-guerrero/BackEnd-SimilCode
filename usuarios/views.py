@@ -1016,13 +1016,11 @@ def listar_lenguajes_usuario(request, usuario_id):
 @require_http_methods(["POST"])
 def crear_comparacion_ia(request, id_comparacion):
     try:
-        # El ID de la comparación viene desde la URL
         if not id_comparacion:
             return JsonResponse({
                 'error': 'Se requiere id_comparacion'
             }, status=400)
         
-        # 1. Obtener la comparación
         try:
             comparacion = ComparacionesIndividuales.objects.get(
                 id=id_comparacion
@@ -1032,7 +1030,6 @@ def crear_comparacion_ia(request, id_comparacion):
                 'error': f'Comparación {id_comparacion} no encontrada'
             }, status=404)
         
-        # 2. Obtener el modelo IA
         if not comparacion.id_modelo_ia:
             return JsonResponse({
                 'error': 'La comparación no tiene un modelo de IA asignado'
@@ -1040,12 +1037,10 @@ def crear_comparacion_ia(request, id_comparacion):
         
         modelo_ia = comparacion.id_modelo_ia
         
-        # 3. Obtener la configuración según el tipo de modelo
         config = None
         proveedor = None
         prompt_config = None
         
-        # Intentar obtener configuración de cada proveedor
         try:
             config = ConfiguracionClaude.objects.select_related('id_prompt').get(
                 id_modelo_ia_id=modelo_ia.id,
@@ -1094,31 +1089,28 @@ def crear_comparacion_ia(request, id_comparacion):
                 'error': 'No hay configuración activa para este modelo de IA'
             }, status=404)
         
-        # 4. Verificar que el prompt esté activo
         if not prompt_config.activo:
             return JsonResponse({
                 'error': 'El prompt configurado no está activo'
             }, status=400)
         
-        # 5. Reemplazar placeholders en el prompt
         prompt_procesado = prompt_config.template_prompt.replace(
             '{{codigo_a}}', comparacion.codigo_1
         ).replace(
             '{{codigo_b}}', comparacion.codigo_2
         )
         
-        # 6. Preparar headers y payload según el proveedor
         headers = {}
         payload = {}
         
         if proveedor == 'Claude':
             headers = {
                 'Content-Type': 'application/json',
-                'x-api-key': config.api_key,
-                'anthropic-version': config.anthropic_version
+                'x-api-key': config.api_key.strip(),
+                'anthropic-version': config.anthropic_version.strip()
             }
             payload = {
-                'model': config.model_name,
+                'model': config.model_name.strip(),
                 'max_tokens': config.max_tokens,
                 'messages': [
                     {
@@ -1131,10 +1123,10 @@ def crear_comparacion_ia(request, id_comparacion):
         elif proveedor == 'OpenAI':
             headers = {
                 'Content-Type': 'application/json',
-                'Authorization': f'Bearer {config.api_key}'
+                'Authorization': f'Bearer {config.api_key.strip()}'
             }
             payload = {
-                'model': config.model_name,
+                'model': config.model_name.strip(),
                 'messages': [
                     {
                         'role': 'user',
@@ -1149,8 +1141,7 @@ def crear_comparacion_ia(request, id_comparacion):
             headers = {
                 'Content-Type': 'application/json'
             }
-            # Gemini usa la API key en la URL
-            endpoint_url = f"{config.endpoint_url}/{config.model_name}:generateContent?key={config.api_key}"
+            endpoint_url = f"{config.endpoint_url.strip()}/{config.model_name.strip()}:generateContent?key={config.api_key.strip()}"
             payload = {
                 'contents': [
                     {
@@ -1170,10 +1161,10 @@ def crear_comparacion_ia(request, id_comparacion):
         elif proveedor == 'DeepSeek':
             headers = {
                 'Content-Type': 'application/json',
-                'Authorization': f'Bearer {config.api_key}'
+                'Authorization': f'Bearer {config.api_key.strip()}'
             }
             payload = {
-                'model': config.model_name,
+                'model': config.model_name.strip(),
                 'messages': [
                     {
                         'role': 'user',
@@ -1184,11 +1175,20 @@ def crear_comparacion_ia(request, id_comparacion):
                 'temperature': float(config.temperature)
             }
         
-        # 7. Hacer la petición
         inicio = time.time()
         
-        # Para Gemini, usamos la URL modificada
-        url = endpoint_url if proveedor == 'Gemini' else config.endpoint_url
+        url = endpoint_url if proveedor == 'Gemini' else config.endpoint_url.strip()
+
+        # === DEBUG TEMPORAL - eliminar después ===
+        print(f"=== DEBUG REQUEST ===")
+        print(f"Proveedor: {proveedor}")
+        print(f"URL: {url}")
+        print(f"Model: {payload.get('model')}")
+        print(f"API Key (primeros 20 chars): {config.api_key.strip()[:20]}...")
+        if proveedor == 'Claude':
+            print(f"anthropic-version: {config.anthropic_version.strip()}")
+        print(f"=====================")
+        # =========================================
         
         response = requests.post(
             url,
@@ -1199,14 +1199,18 @@ def crear_comparacion_ia(request, id_comparacion):
         
         tiempo_respuesta = time.time() - inicio
         
-        # 8. Verificar respuesta
         if response.status_code != 200:
+            # === DEBUG ERROR ===
+            print(f"=== ERROR RESPUESTA ===")
+            print(f"Status: {response.status_code}")
+            print(f"Body: {response.text}")
+            print(f"======================")
+            # ==================
             return JsonResponse({
                 'error': f'Error de la API {proveedor}: {response.status_code}',
                 'detalle': response.text
             }, status=response.status_code)
         
-        # 9. Extraer la respuesta según el proveedor
         response_data = response.json()
         respuesta_ia = None
         tokens_usados = 0
@@ -1233,7 +1237,6 @@ def crear_comparacion_ia(request, id_comparacion):
             respuesta_ia = response_data['choices'][0]['message']['content']
             tokens_usados = response_data.get('usage', {}).get('total_tokens', 0)
         
-        # 10. NUEVO: Extraer el porcentaje de similitud general
         porcentaje_similitud = None
         patron_similitud = r'SIMILITUD GENERAL:\s*(\d+)'
         match = re.search(patron_similitud, respuesta_ia, re.IGNORECASE)
@@ -1241,20 +1244,16 @@ def crear_comparacion_ia(request, id_comparacion):
         if match:
             porcentaje_similitud = int(match.group(1))
         else:
-            # Si no encuentra el patrón, intentar otros formatos comunes
             patron_alternativo = r'similitud general[:\s]*(\d+)%?'
             match_alt = re.search(patron_alternativo, respuesta_ia, re.IGNORECASE)
             if match_alt:
                 porcentaje_similitud = int(match_alt.group(1))
         
-        # 11. NUEVO: Guardar en la base de datos
         if porcentaje_similitud is not None:
-            # Eliminar resultado anterior si existe (para evitar duplicados)
             ResultadosSimilitudIndividual.objects.filter(
                 id_comparacion_individual=comparacion
             ).delete()
             
-            # Crear nuevo resultado
             resultado = ResultadosSimilitudIndividual.objects.create(
                 id_comparacion_individual=comparacion,
                 porcentaje_similitud=porcentaje_similitud,
@@ -1265,7 +1264,6 @@ def crear_comparacion_ia(request, id_comparacion):
         else:
             mensaje_guardado = 'No se pudo extraer el porcentaje de similitud. Respuesta no guardada.'
         
-        # 12. Retornar resultado
         return JsonResponse({
             'mensaje': 'Comparación exitosa',
             'guardado': mensaje_guardado,
@@ -2195,11 +2193,11 @@ def crear_comentario_eficiencia_individual(request, id_resultado_eficiencia):
         if proveedor == 'Claude':
             headers = {
                 'Content-Type': 'application/json',
-                'x-api-key': config.api_key,
-                'anthropic-version': config.anthropic_version
+                'x-api-key': config.api_key.strip(),
+                'anthropic-version': config.anthropic_version.strip()
             }
             payload = {
-                'model': config.model_name,
+                'model': config.model_name.strip(),
                 'max_tokens': config.max_tokens,
                 'messages': [
                     {
