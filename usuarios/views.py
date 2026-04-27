@@ -2546,7 +2546,6 @@ def crear_comparacion_grupal_ia(request, id_comparacion_grupal):
         proveedor = None
         prompt_config = None
         
-        # Intentar obtener configuración de cada proveedor
         try:
             config = ConfiguracionClaude.objects.select_related('id_prompt_grupal').get(
                 id_modelo_ia_id=modelo_ia.id,
@@ -2616,7 +2615,6 @@ def crear_comparacion_grupal_ia(request, id_comparacion_grupal):
             '{{codigos_array}}', codigos_texto
         )
         
-        # Reemplazar placeholders individuales si existen
         for idx, codigo in enumerate(codigos_fuente, start=1):
             nombre_archivo = codigo.nombre_archivo or f"Código {idx}"
             prompt_procesado = prompt_procesado.replace(
@@ -2752,7 +2750,9 @@ def crear_comparacion_grupal_ia(request, id_comparacion_grupal):
         datos_estructurados = None
         resumen = None
         mas_similares_list = []
-        
+        # ── NUEVO: código base de referencia ──
+        codigo_base = None
+
         try:
             # Limpiar respuesta
             respuesta_limpia = respuesta_ia.strip()
@@ -2767,6 +2767,10 @@ def crear_comparacion_grupal_ia(request, id_comparacion_grupal):
             datos_estructurados = json.loads(respuesta_limpia)
             resumen = datos_estructurados.get('resumen', '')
             mas_similares_list = datos_estructurados.get('mas_similares', [])
+
+            # ── NUEVO: extraer codigo_base si la IA lo generó ──
+            if 'codigo_base' in datos_estructurados:
+                codigo_base = datos_estructurados['codigo_base']
             
         except json.JSONDecodeError as e:
             print(f"Error al parsear JSON de la IA: {e}")
@@ -2802,7 +2806,6 @@ def crear_comparacion_grupal_ia(request, id_comparacion_grupal):
             # Formatear mas_similares para guardarlo como texto
             mas_similares_texto = ""
             if mas_similares_list:
-                # Verificar si es el mensaje de "no similitudes"
                 if (len(mas_similares_list) == 1 and 
                     mas_similares_list[0].get('par') == 'Ninguno'):
                     mas_similares_texto = mas_similares_list[0].get('razon', 'No se encontraron similitudes notables')
@@ -2827,14 +2830,12 @@ def crear_comparacion_grupal_ia(request, id_comparacion_grupal):
             # Guardar comparaciones pareadas
             comparaciones_guardadas = []
             if datos_estructurados and 'matriz_similitud' in datos_estructurados:
-                
                 for comparacion_item in datos_estructurados['matriz_similitud']:
                     similitud = comparacion_item.get('similitud', 0)
                     nivel = comparacion_item.get('nivel', obtener_nivel_similitud(similitud))
                     orden_a = comparacion_item.get('orden_a', 0)
                     orden_b = comparacion_item.get('orden_b', 0)
                     
-                    # Obtener nombres: primero intenta desde la IA, si no existe usa el diccionario
                     codigo_a_nombre = comparacion_item.get('codigo_a', codigos_por_orden.get(orden_a, f'Código {orden_a}'))
                     codigo_b_nombre = comparacion_item.get('codigo_b', codigos_por_orden.get(orden_b, f'Código {orden_b}'))
                     
@@ -2881,7 +2882,6 @@ def crear_comparacion_grupal_ia(request, id_comparacion_grupal):
                     'similitud': similitud,
                     'nivel': nivel
                 }
-                # Agregar la inversa también
                 key_inv = f"{orden_b}-{orden_a}"
                 matriz_tabla[key_inv] = {
                     'similitud': similitud,
@@ -2908,7 +2908,9 @@ def crear_comparacion_grupal_ia(request, id_comparacion_grupal):
             'codigos_mas_similares': mas_similares_list,
             'matriz_similitud': comparaciones_guardadas,
             'matriz_tabla': matriz_tabla,
-            'codigos_comparados': codigos_resumen
+            'codigos_comparados': codigos_resumen,
+            # ── NUEVO: retornar codigo_base al frontend ──
+            'codigo_base': codigo_base,
         }, status=200)
         
     except json.JSONDecodeError:
@@ -3687,14 +3689,12 @@ def obtener_resultado_similitud_grupal(request, comparacion_grupal_id):
                 'nivel': comp.nivel_similitud
             })
             
-            # Para matriz tabla (formato optimizado para frontend)
             key = f"{comp.codigo_a_orden}-{comp.codigo_b_orden}"
             matriz_tabla[key] = {
                 'similitud': similitud_int,
                 'nivel': comp.nivel_similitud
             }
             
-            # Agregar también la inversa
             key_inv = f"{comp.codigo_b_orden}-{comp.codigo_a_orden}"
             matriz_tabla[key_inv] = {
                 'similitud': similitud_int,
@@ -3708,7 +3708,21 @@ def obtener_resultado_similitud_grupal(request, comparacion_grupal_id):
             for linea in lineas:
                 if linea.strip():
                     mas_similares.append(linea.strip())
-        
+
+        # ── NUEVO: extraer codigo_base desde respuesta_completa guardada ──
+        codigo_base = None
+        if resultado_similitud.respuesta_completa:
+            try:
+                respuesta_limpia = resultado_similitud.respuesta_completa.strip()
+                if '```json' in respuesta_limpia:
+                    respuesta_limpia = respuesta_limpia.split('```json')[1].split('```')[0].strip()
+                elif '```' in respuesta_limpia:
+                    respuesta_limpia = respuesta_limpia.split('```')[1].split('```')[0].strip()
+                datos_completos = json.loads(respuesta_limpia)
+                codigo_base = datos_completos.get('codigo_base', None)
+            except (json.JSONDecodeError, Exception):
+                codigo_base = None
+
         # Preparar respuesta
         resultado = {
             'existe_analisis': True,
@@ -3722,7 +3736,9 @@ def obtener_resultado_similitud_grupal(request, comparacion_grupal_id):
             'matriz_similitud': matriz_similitud,
             'matriz_tabla': matriz_tabla,
             'total_comparaciones': len(matriz_similitud),
-            'respuesta_completa_ia': resultado_similitud.respuesta_completa
+            'respuesta_completa_ia': resultado_similitud.respuesta_completa,
+            # ── NUEVO: código base extraído del JSON guardado ──
+            'codigo_base': codigo_base,
         }
         
         return JsonResponse(resultado, status=200)
