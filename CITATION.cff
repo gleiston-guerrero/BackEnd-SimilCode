@@ -17,8 +17,8 @@ abstract: >
 version: 1.0.0
 date-released: "2026-07-07"
 license: MIT
-repository-code: "https://github.com/rnavasr/BackEnd-SimilCode"
-url: "https://github.com/rnavasr/BackEnd-SimilCode"
+repository-code: "https://github.com/gleiston-guerrero/BackEnd-SimilCode"
+url: "https://github.com/gleiston-guerrero/BackEnd-SimilCode"
 keywords:
   - source-code similarity
   - academic integrity
@@ -39,10 +39,7 @@ authors:
   - given-names: "Rafael Alexander"
     family-names: "Navas Rivera"
     email: "rafael.navas2017@uteq.edu.ec"
-    # ORCID pending user visual confirmation at https://orcid.org/0009-0005-7926-2648
-    # Replace the line below with:  orcid: "https://orcid.org/0009-0005-7926-2648"
-    # once the profile page displays "Rafael Alexander Navas Rivera".
-    orcid: "TO-BE-CONFIRMED-NAVAS"
+    orcid: "https://orcid.org/0009-0005-7926-2648"
     affiliation: "Facultad de Ciencias de la Computación, Universidad Técnica Estatal de Quevedo (UTEQ), Quevedo, Los Ríos, Ecuador"
 
   - given-names: "Gleiston Cicerón"
@@ -75,7 +72,7 @@ preferred-citation:
   authors:
     - given-names: "Rafael Alexander"
       family-names: "Navas Rivera"
-      orcid: "TO-BE-CONFIRMED-NAVAS"
+      orcid: "https://orcid.org/0009-0005-7926-2648"
       affiliation: "Universidad Técnica Estatal de Quevedo, Ecuador"
     - given-names: "Gleiston Cicerón"
       family-names: "Guerrero-Ulloa"
@@ -101,7 +98,7 @@ preferred-citation:
 
 identifiers:
   - type: url
-    value: "https://github.com/rnavasr/BackEnd-SimilCode"
+    value: "https://github.com/gleiston-guerrero/BackEnd-SimilCode"
     description: "Canonical repository of the SimilCode backend"
   # Once Zenodo mints the DOI upon the first GitHub release, add:
   # - type: doi
