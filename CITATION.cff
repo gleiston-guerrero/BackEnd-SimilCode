@@ -101,6 +101,6 @@ identifiers:
     value: "https://github.com/gleiston-guerrero/BackEnd-SimilCode"
     description: "Canonical repository of the SimilCode backend"
   # Once Zenodo mints the DOI upon the first GitHub release, add:
-  # - type: doi
-  #   value: "10.5281/zenodo.XXXXXXX"
-  #   description: "Zenodo archive of SimilCode Backend v1.0.0"
+  - type: doi
+    value: "10.5281/zenodo.21265178"
+    description: "Zenodo archive of SimilCode Backend v1.0.0"
