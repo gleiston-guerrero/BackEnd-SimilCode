@@ -22,10 +22,13 @@ The system returns multidimensional similarity scores together with human-readab
 
 Supported source languages in this release: **C#** and **Java**.
 
-## Related repository
+## Related repositories
 
 The React 18.2 frontend that consumes this API is available separately:  
-[https://github.com/gleiston-guerrero/FrontEnd-SimilCode](https://github.com/gleiston-guerrero/FrontEnd-SimilCode)
+<https://github.com/gleiston-guerrero/FrontEnd-SimilCode>
+
+The benchmark dataset (120 C# and Java paired code cases) used to evaluate the system in the accompanying paper is archived separately:  
+<https://github.com/gleiston-guerrero/SimilCode-Benchmark>
 
 ## Technical stack
 
@@ -68,7 +71,8 @@ The API will be available at `http://localhost:8000/api/`.
 
 ### Reproducing the paper's benchmark
 
-The 120 paired code cases used in the accompanying study (60 C# + 60 Java) are archived in Zenodo (DOI to be inserted upon acceptance). To reproduce the benchmark:
+The 120 paired code cases used in the accompanying study (60 C# + 60 Java) are archived in the companion dataset repository
+<https://github.com/gleiston-guerrero/SimilCode-Benchmark> and will be assigned a permanent Zenodo DOI upon acceptance of the manuscript.
 
 ```bash
 docker compose exec web python manage.py load_benchmark --path /path/to/similcode-benchmark-v1.0/
