@@ -15,7 +15,7 @@ abstract: >
   resource-constrained higher-education institutions. Supported source
   languages in this release: C# and Java.
 version: 1.0.0
-date-released: "2026-07-07"
+date-released: "2026-07-08"
 license: MIT
 repository-code: "https://github.com/gleiston-guerrero/BackEnd-SimilCode"
 url: "https://github.com/gleiston-guerrero/BackEnd-SimilCode"
