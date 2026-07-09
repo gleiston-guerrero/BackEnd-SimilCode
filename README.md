@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.14](https://img.shields.io/badge/python-3.14-blue.svg)](https://www.python.org/downloads/release/python-3140/)
 [![Django 4.2](https://img.shields.io/badge/django-4.2-green.svg)](https://www.djangoproject.com/)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21265178.svg)](https://doi.org/10.5281/zenodo.21265178)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21265177.svg)](https://doi.org/10.5281/zenodo.21265177)
 
 ---
 
@@ -107,7 +107,7 @@ BackEnd-SimilCode/
 If you use SimilCode in your research, please cite both the software and the accompanying paper:
 
 **Software:**
-> Guerrero-Ulloa, G. C., Navas Rivera, R. A., Díaz-Macías, E., Hornos, M. J., & Rodríguez-Domínguez, C. (2026). *SimilCode Backend* (Version 1.0.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.21265178
+> Guerrero-Ulloa, G. C., Navas Rivera, R. A., Díaz-Macías, E., Hornos, M. J., & Rodríguez-Domínguez, C. (2026). *SimilCode Backend* (Version 1.0.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.21265177
 
 **Paper:**
 > Guerrero-Ulloa, G. C., Navas Rivera, R. A., Díaz-Macías, E., Hornos, M. J., & Rodríguez-Domínguez, C. (2026). SimilCode: A Web Application for Source Code Similarity Detection and Algorithmic Efficiency Analysis using Generative Artificial Intelligence. *International Journal for Educational Integrity* (under review).
