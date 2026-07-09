@@ -117,5 +117,5 @@ identifiers:
     value: "https://github.com/gleiston-guerrero/BackEnd-SimilCode"
     description: "Canonical repository of the SimilCode backend"
   - type: doi
-    value: "10.5281/zenodo.21265178"
+    value: "10.5281/zenodo.21265177"
     description: "Zenodo archive of SimilCode Backend v1.0.0"
