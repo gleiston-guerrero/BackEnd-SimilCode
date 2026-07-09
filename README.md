@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.14](https://img.shields.io/badge/python-3.14-blue.svg)](https://www.python.org/downloads/release/python-3140/)
 [![Django 4.2](https://img.shields.io/badge/django-4.2-green.svg)](https://www.djangoproject.com/)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.XXXXXXX.svg)](https://doi.org/10.5281/zenodo.XXXXXXX)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21265178.svg)](https://doi.org/10.5281/zenodo.21265178)
 
 ---
 
@@ -25,7 +25,7 @@ Supported source languages in this release: **C#** and **Java**.
 ## Related repository
 
 The React 18.2 frontend that consumes this API is available separately:  
-[https://github.com/rnavasr/FrontEnd-SimilCode](https://github.com/rnavasr/FrontEnd-SimilCode)
+[https://github.com/gleiston-guerrero/FrontEnd-SimilCode](https://github.com/gleiston-guerrero/FrontEnd-SimilCode)
 
 ## Technical stack
 
@@ -55,7 +55,7 @@ The React 18.2 frontend that consumes this API is available separately:
 ### Installation
 
 ```bash
-git clone https://github.com/rnavasr/BackEnd-SimilCode.git
+git clone https://github.com/gleiston-guerrero/BackEnd-SimilCode.git
 cd BackEnd-SimilCode
 cp .env.example .env
 # edit .env with your LLM provider API keys and PostgreSQL credentials
@@ -103,22 +103,24 @@ BackEnd-SimilCode/
 If you use SimilCode in your research, please cite both the software and the accompanying paper:
 
 **Software:**
-> Navas Rivera, R. A., Guerrero-Ulloa, G. C., Díaz-Macías, E., Hornos, M. J., & Rodríguez-Domínguez, C. (2026). *SimilCode Backend* (Version 1.0.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.XXXXXXX
+> Guerrero-Ulloa, G. C., Navas Rivera, R. A., Díaz-Macías, E., Hornos, M. J., & Rodríguez-Domínguez, C. (2026). *SimilCode Backend* (Version 1.0.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.21265178
 
 **Paper:**
-> Navas Rivera, R. A., Guerrero-Ulloa, G. C., Díaz-Macías, E., Hornos, M. J., & Rodríguez-Domínguez, C. (2026). A controlled within-subjects benchmark of commercial large language models as source-code similarity analysts, with an integrated screening tool for academic-integrity workflows. *International Journal for Educational Integrity* (under review).
+> Guerrero-Ulloa, G. C., Navas Rivera, R. A., Díaz-Macías, E., Hornos, M. J., & Rodríguez-Domínguez, C. (2026). SimilCode: A Web Application for Source Code Similarity Detection and Algorithmic Efficiency Analysis using Generative Artificial Intelligence. *International Journal for Educational Integrity* (under review).
 
 A machine-readable `CITATION.cff` file is provided in this repository; GitHub renders a "Cite this repository" button in the sidebar, and Zenodo reads it automatically when minting the DOI.
 
 ## Authors and affiliations
 
-| Author | Affiliation | Role |
+| Author | Affiliation | CRediT roles |
 |---|---|---|
-| **Rafael Alexander Navas Rivera** | Facultad de Ciencias de la Computación, Universidad Técnica Estatal de Quevedo (UTEQ), Ecuador | Design, implementation, evaluation, corresponding author for the software |
-| **Gleiston Cicerón Guerrero-Ulloa** | Facultad de Ciencias de la Computación, Universidad Técnica Estatal de Quevedo (UTEQ), Ecuador | Supervision, methodological design, statistical validation, corresponding author for the paper |
-| **Efraín Díaz-Macías** | Facultad de Ciencias de la Computación, Universidad Técnica Estatal de Quevedo (UTEQ), Ecuador | Methodological review |
-| **Miguel J. Hornos** | Department of Software Engineering, E.T.S. de Ingenierías Informática y de Telecomunicación, Universidad de Granada (UGR), Spain | Methodological review |
-| **Carlos Rodríguez-Domínguez** | Department of Software Engineering, E.T.S. de Ingenierías Informática y de Telecomunicación, Universidad de Granada (UGR), Spain | Methodological review |
+| **Gleiston Cicerón Guerrero-Ulloa** | Facultad de Ciencias de la Computación, Universidad Técnica Estatal de Quevedo (UTEQ), Ecuador | Conceptualization; Data Curation; Formal Analysis; Methodology; Project Administration; Supervision; Validation; Visualization; Writing – Original Draft; Writing – Review & Editing |
+| **Rafael Alexander Navas Rivera** | Facultad de Ciencias de la Computación, Universidad Técnica Estatal de Quevedo (UTEQ), Ecuador | Conceptualization; Data Curation; Formal Analysis; Methodology; Project Administration; Resources; Software; Visualization; Writing – Original Draft; Writing – Review & Editing |
+| **Efraín Díaz-Macías** | Facultad de Ciencias de la Computación, Universidad Técnica Estatal de Quevedo (UTEQ), Ecuador | Formal Analysis; Methodology; Project Administration; Resources; Supervision; Validation; Writing – Review & Editing |
+| **Miguel J. Hornos** | Department of Software Engineering, University of Granada (UGR), Spain | Formal Analysis; Funding Acquisition; Methodology; Project Administration; Resources; Supervision; Validation; Visualization; Writing – Review & Editing |
+| **Carlos Rodríguez-Domínguez** ⭐ | Department of Software Engineering, and Research Center for Information and Communication Technologies (CITIC), University of Granada (UGR), Spain | Formal Analysis; Funding Acquisition; Methodology; Project Administration; Resources; Supervision; Validation; Visualization; Writing – Review & Editing |
+
+⭐ **Corresponding author:** Carlos Rodríguez-Domínguez — <carlosrodriguez@ugr.es>
 
 ## Privacy and ethical considerations
 
